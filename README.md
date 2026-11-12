@@ -8,8 +8,9 @@ una fila con estado `REVISAR`.
 
 ## Desplegar la API
 
-1. Importa el repositorio en Vercel y selecciona `OneDrive/Escritorio/ev2`
-   como **Root Directory**. La funcion Python se detecta desde `api/alerta.py`.
+1. Importa el repositorio en Vercel y deja **Root Directory** en la raiz del
+   repositorio (`./`), donde estan `index.html` y `api/alerta.py`. La funcion
+   Python se detecta desde `api/alerta.py`.
 2. En **Settings > Environment Variables**, agrega:
    - `ALERT_API_SECRET`: secreto aleatorio compartido con el robot.
    - `RESEND_API_KEY`: clave de API de Resend.
