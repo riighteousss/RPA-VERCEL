@@ -51,7 +51,7 @@
             required
           >
           <p class="hint">Solo se usa para esta solicitud; no se guarda en el navegador.</p>
-          <p class="hint">El ejemplo incluye REVISAR: si Resend esta configurado, enviara un correo real. Cambia su estado a OK para probar el CSV sin enviar alertas.</p>
+          <p class="hint">El análisis visual se ejecuta en este navegador. La API solo envía alertas REVISAR si Resend está configurado en el servidor.</p>
 
           <div class="field-heading">
             <label for="payload">Movimientos en formato JSON</label>
@@ -63,6 +63,7 @@
             <span id="button-label">Analizar y generar reporte</span>
             <span aria-hidden="true">→</span>
           </button>
+          <button class="secondary-button" id="analyze-button" type="button">Analizar datos aquí</button>
         </form>
 
         <div id="result" class="result" role="status" aria-live="polite" hidden>
@@ -72,6 +73,114 @@
             <p id="result-detail"></p>
           </div>
         </div>
+      </section>
+
+      <section id="dashboard" class="dashboard" aria-labelledby="dashboard-title" hidden>
+        <div class="dashboard-heading">
+          <div>
+            <p class="eyebrow">RESULTADOS DEL ANÁLISIS LOCAL</p>
+            <h2 id="dashboard-title">Resumen de movimientos</h2>
+          </div>
+          <span id="dashboard-count" class="count-label"></span>
+        </div>
+
+        <div class="metric-grid" aria-label="Resumen de datos">
+          <article class="metric-card">
+            <span class="metric-label">Movimientos</span>
+            <strong id="metric-total">0</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Para revisar</span>
+            <strong id="metric-review" class="warning-text">0</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Monto neto válido</span>
+            <strong id="metric-amount">0</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Cuentas involucradas</span>
+            <strong id="metric-accounts">0</strong>
+          </article>
+        </div>
+
+        <div class="chart-grid">
+          <article class="panel chart-panel">
+            <h3>Estado de movimientos</h3>
+            <div id="status-chart" class="bar-chart" aria-label="Movimientos por estado"></div>
+          </article>
+          <article class="panel chart-panel">
+            <h3>Motivos frecuentes de revisión</h3>
+            <div id="reason-chart" class="bar-chart" aria-label="Motivos de revisión más comunes"></div>
+          </article>
+        </div>
+
+        <article class="panel data-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">DETALLE</p>
+              <h3>Tabla de movimientos</h3>
+            </div>
+            <label class="filter-label" for="movement-filter">
+              Mostrar
+              <select id="movement-filter">
+                <option value="all">Todos</option>
+                <option value="review">Para revisar</option>
+                <option value="ok">Sin alertas</option>
+              </select>
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Fecha</th>
+                  <th>Cuenta</th>
+                  <th>Acción</th>
+                  <th class="numeric-cell">Monto</th>
+                  <th>Estado</th>
+                  <th>Motivo</th>
+                </tr>
+              </thead>
+              <tbody id="movement-rows"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel review-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">SEGUIMIENTO</p>
+              <h3>Valores para revisar</h3>
+            </div>
+            <span id="review-count" class="review-count"></span>
+          </div>
+          <p class="section-copy">Se señalan las reglas reportadas por el robot y discrepancias identificables en los datos (por ejemplo, duplicados, límites excedidos o signos incompatibles).</p>
+          <div id="review-empty" class="empty-state" hidden>No se detectaron valores para revisar.</div>
+          <div id="review-table-wrap" class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Cuenta</th>
+                  <th>Monto</th>
+                  <th>Hallazgo</th>
+                  <th>Sugerencia</th>
+                </tr>
+              </thead>
+              <tbody id="review-rows"></tbody>
+            </table>
+          </div>
+          <form id="partner-email-form" class="partner-form">
+            <label for="partner-emails">Correo(s) de los socios</label>
+            <input id="partner-emails" name="partner-emails" type="text" placeholder="socio@empresa.com, otro@empresa.com" autocomplete="email">
+            <label for="follow-up-note">Solicitud de revisión o seguimiento</label>
+            <textarea id="follow-up-note" name="follow-up-note" rows="3" placeholder="Por favor, revisen estos movimientos y confirmen los próximos pasos."></textarea>
+            <button class="secondary-button email-button" type="submit">Preparar correo a socios</button>
+            <p class="hint email-hint">Abre tu aplicación de correo con un borrador; no envía el mensaje automáticamente. No se transmiten los datos hasta que tú lo envíes.</p>
+            <p id="email-result" class="email-result" role="status" aria-live="polite"></p>
+          </form>
+        </article>
       </section>
 
       <section class="workflow" aria-label="Flujo de trabajo">
@@ -84,7 +193,7 @@
 
       <footer>
         <span>EV2 · Robot local, reportes en la nube</span>
-        <span>El correo solo se envia si hay movimientos <strong>REVISAR</strong>.</span>
+        <span>Las alertas automáticas requieren Resend; los correos a socios se preparan en tu aplicación.</span>
       </footer>
     </main>
   </body>
