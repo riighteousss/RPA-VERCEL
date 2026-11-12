@@ -29,22 +29,42 @@ Resend solo acepta remitentes de dominios que hayas verificado en su cuenta.
 La funcion usa sus variables de entorno; las credenciales no se envian desde
 el robot.
 
-## Ejecutar el robot local
+## Preparar y ejecutar el robot local
 
-Instala en el entorno de Python las dependencias del robot que ya utilizas
-(Selenium, Chrome, pandas, matplotlib, openpyxl y requests). En PowerShell,
-configura la URL y el mismo secreto antes de ejecutar:
+El robot automatiza el sitio de demostración `https://demo.testfire.net/`.
+Selenium abre Chrome en tu PC, inicia sesión con la cuenta de demostración,
+lee la tabla de transacciones y genera reportes Excel. No se ejecuta en Vercel.
+
+Con Python 3.12 o posterior y Google Chrome instalado, abre PowerShell en la
+carpeta del repositorio y prepara el entorno aislado:
+
+```powershell
+py -3.14 -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install -r requirements-robot.txt
+```
+
+Si tu Python tiene otra versión compatible, sustituye `-3.14` por la versión
+instalada. Selenium Manager administra el controlador de Chrome al iniciar el
+navegador; la primera ejecución requiere conexión a internet.
+Las dependencias del robot están en `requirements-robot.txt` para que Vercel no
+las instale dentro de la función API, que no las necesita.
+
+Para publicar el resultado en Vercel, configura en la misma ventana de
+PowerShell la URL `/api/alerta` del proyecto y el mismo secreto que `ALERT_API_SECRET`
+en Vercel:
 
 ```powershell
 $env:VERCEL_ALERT_URL = "https://tu-proyecto.vercel.app/api/alerta"
 $env:VERCEL_ALERT_SECRET = "el-mismo-secreto-configurado-en-vercel"
-py robot_ep2.py
+& .\.venv\Scripts\python.exe .\robot_ep2.py
 ```
 
-El robot conserva sus reportes Excel y, si Vercel esta configurado, guarda
-ademas `output/Reporte_Alerta_Vercel_<fecha>.csv`. Sin esas dos variables el
-flujo continua solo en local y no intenta conectarse a Vercel. Si la API o el
-correo fallan, se registra el error y se conservan los informes locales.
+El robot conserva sus reportes Excel en `output` y, si Vercel está configurado,
+envía directamente los movimientos analizados a la API y guarda el CSV devuelto
+como `output/Reporte_Alerta_Vercel_<fecha>.csv`. Después puedes cargar ese CSV
+en el panel de Vercel para consultar sus gráficos y hallazgos. Sin ambas
+variables el robot sigue funcionando en local, sin conectarse a Vercel. Si el
+envío falla, registra el error y conserva los reportes locales.
 
 ## Contrato de la API
 
@@ -54,14 +74,16 @@ respuesta exitosa es `text/csv`; `X-Alert-Email` indica `enviado` o
 `no_requerido`. Se aceptan hasta 5000 filas por llamada. No se envia correo si
 ninguna fila esta marcada `REVISAR`.
 
-La pagina de prueba permite pegar el secreto y enviar filas JSON manualmente.
-No persiste el secreto; cualquier persona autorizada para usar el formulario
-debe conocerlo. Para el flujo habitual, el robot local llama directamente a la
-API con sus variables de entorno.
+El panel acepta el CSV generado por el robot o un archivo JSON, o permite
+pegar/editar el JSON. **Analizar informe** presenta los datos en el navegador
+sin enviarlos. **Generar CSV en Vercel** es opcional: solicita el secreto en ese
+momento, lo usa solo para esa llamada y descarga el CSV de la API. Para el flujo
+habitual, el robot local llama directamente a la API con sus variables de
+entorno.
 
 ## Panel de resumen y seguimiento
 
-Usa **Analizar datos aqui** para mostrar en el navegador un resumen de los
+Usa **Analizar informe** para mostrar en el navegador un resumen de los
 movimientos, montos netos, cuentas involucradas, graficos de estados y motivos,
 una tabla filtrable y una lista de hallazgos. El analisis es local: no requiere
 el secreto ni transmite los datos. Considera los errores informados por el
@@ -87,5 +109,5 @@ la sustituye.
 Para validar cambios sin Selenium ni enviar correos reales, ejecuta:
 
 ```powershell
-py test_logica_offline.py
+& .\.venv\Scripts\python.exe .\test_logica_offline.py
 ```

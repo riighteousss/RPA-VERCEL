@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#101a30">
+    <meta name="theme-color" content="#f5f7fb">
     <meta
       name="description"
-      content="Panel de alertas EV2 para analizar movimientos y descargar reportes CSV."
+      content="Centro de control EV2 para revisar movimientos, detectar anomalías y generar reportes."
     >
     <title>EV2 | Alertas de movimientos</title>
     <link rel="stylesheet" href="/styles.css">
@@ -17,53 +17,66 @@
       <header class="topbar">
         <a class="brand" href="/" aria-label="EV2 inicio">
           <span class="brand-mark" aria-hidden="true">E</span>
-          <span>EV<span class="brand-accent">2</span></span>
+          <span>EV<span class="brand-accent">2</span><small>CONTROL DE MOVIMIENTOS</small></span>
         </a>
-        <span class="status-pill"><span class="status-dot"></span> ALERTAS DE MOVIMIENTOS</span>
+        <span class="status-pill"><span class="status-dot"></span> CENTRO DE CONTROL</span>
       </header>
 
       <section class="intro">
-        <p class="eyebrow">MONITOREO Y CONTROL</p>
-        <h1>Detecta lo que<br>necesita <span>atencion.</span></h1>
+        <p class="eyebrow"><span class="eyebrow-line"></span> OPERACIONES · MONITOREO INTELIGENTE</p>
+        <h1>Cada movimiento,<br><span>bajo control.</span></h1>
         <p class="intro-copy">
-          Analiza los movimientos procesados por tu robot, recibe avisos de
-          discrepancias y descarga el reporte para continuar la revision.
+          Importa el reporte de tu robot, identifica excepciones y convierte
+          los datos en decisiones claras. El análisis se realiza en este navegador.
         </p>
+        <div class="trust-note"><span class="trust-icon" aria-hidden="true">✓</span> Tus datos permanecen en tu dispositivo durante el análisis local</div>
       </section>
 
       <section class="panel" aria-labelledby="panel-title">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">HERRAMIENTA DE PRUEBA</p>
-            <h2 id="panel-title">Probar un reporte</h2>
+            <p class="eyebrow">01 · CARGA Y ANÁLISIS</p>
+            <h2 id="panel-title">Revisar informe de movimientos</h2>
+            <p class="panel-subtitle">Carga el CSV generado por el robot o analiza un archivo JSON.</p>
           </div>
-          <span class="api-label"><span class="api-dot"></span> API protegida</span>
+          <span class="api-label"><span class="api-dot"></span> ANÁLISIS LOCAL</span>
         </div>
 
         <form id="alert-form">
-          <label for="secret">Secreto de la API</label>
-          <input
-            id="secret"
-            name="secret"
-            type="password"
-            autocomplete="off"
-            placeholder="Pega ALERT_API_SECRET"
-            required
-          >
-          <p class="hint">Solo se usa para esta solicitud; no se guarda en el navegador.</p>
-          <p class="hint">El análisis visual se ejecuta en este navegador. La API solo envía alertas REVISAR si Resend está configurado en el servidor.</p>
+          <label class="file-drop" id="drop-zone" for="report-file">
+            <span class="upload-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14.5v4A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="upload-copy"><strong>Arrastra tu informe aquí o <span>selecciona un archivo</span></strong><small>CSV del robot de EV2 o archivo JSON · Máximo 5 MB</small></span>
+            <input id="report-file" type="file" accept=".csv,.json,text/csv,application/json">
+          </label>
+          <p id="file-status" class="file-status" role="status" aria-live="polite">También puedes <button class="text-button" id="load-example" type="button">cargar datos de demostración</button> para explorar el panel.</p>
 
-          <div class="field-heading">
-            <label for="payload">Movimientos en formato JSON</label>
-            <button class="text-button" id="load-example" type="button">Cargar ejemplo</button>
+          <details class="payload-details">
+            <summary>Ver o editar los datos del informe (JSON)</summary>
+            <div class="field-heading">
+              <label for="payload">Contenido del informe</label>
+            </div>
+            <textarea id="payload" name="payload" spellcheck="false" placeholder='{"movimientos":[...]}'></textarea>
+          </details>
+
+          <div class="action-row">
+            <button class="submit-button" id="analyze-button" type="button">
+              <span>Analizar informe</span>
+              <span aria-hidden="true">→</span>
+            </button>
+            <button class="text-button api-toggle" id="api-toggle" type="button">Generar CSV en Vercel <span aria-hidden="true">↗</span></button>
           </div>
-          <textarea id="payload" name="payload" spellcheck="false" required></textarea>
 
-          <button class="submit-button" id="submit-button" type="submit">
-            <span id="button-label">Analizar y generar reporte</span>
-            <span aria-hidden="true">→</span>
-          </button>
-          <button class="secondary-button" id="analyze-button" type="button">Analizar datos aquí</button>
+          <div id="api-settings" class="api-settings" hidden>
+            <label for="secret">Secreto de la API</label>
+            <input id="secret" name="secret" type="password" autocomplete="off" placeholder="ALERT_API_SECRET">
+            <p class="hint">Se usa solo en esta solicitud y no se guarda en el navegador. La API genera el CSV y envía la alerta si encuentra filas REVISAR.</p>
+            <button class="secondary-button" id="submit-button" type="submit">
+              <span id="button-label">Generar CSV y enviar alerta</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+          </div>
         </form>
 
         <div id="result" class="result" role="status" aria-live="polite" hidden>
@@ -78,7 +91,7 @@
       <section id="dashboard" class="dashboard" aria-labelledby="dashboard-title" hidden>
         <div class="dashboard-heading">
           <div>
-            <p class="eyebrow">RESULTADOS DEL ANÁLISIS LOCAL</p>
+            <p class="eyebrow">02 · RESULTADOS DEL ANÁLISIS</p>
             <h2 id="dashboard-title">Resumen de movimientos</h2>
           </div>
           <span id="dashboard-count" class="count-label"></span>
@@ -183,17 +196,9 @@
         </article>
       </section>
 
-      <section class="workflow" aria-label="Flujo de trabajo">
-        <div><span class="step-number">01</span><span>Analiza en tu robot local</span></div>
-        <span class="workflow-arrow" aria-hidden="true">→</span>
-        <div><span class="step-number">02</span><span>Detecta discrepancias</span></div>
-        <span class="workflow-arrow" aria-hidden="true">→</span>
-        <div><span class="step-number">03</span><span>Descarga y recibe alertas</span></div>
-      </section>
-
       <footer>
-        <span>EV2 · Robot local, reportes en la nube</span>
-        <span>Las alertas automáticas requieren Resend; los correos a socios se preparan en tu aplicación.</span>
+        <span class="footer-brand">EV2 <span>·</span> CONTROL DE MOVIMIENTOS</span>
+        <span>Robot local · Panel en la nube · Alertas automáticas sujetas a configuración</span>
       </footer>
     </main>
   </body>

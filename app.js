@@ -45,24 +45,154 @@ const resultDetail = document.querySelector("#result-detail");
 const dashboard = document.querySelector("#dashboard");
 const movementFilter = document.querySelector("#movement-filter");
 const emailForm = document.querySelector("#partner-email-form");
+const fileInput = document.querySelector("#report-file");
+const dropZone = document.querySelector("#drop-zone");
+const fileStatus = document.querySelector("#file-status");
+const apiSettings = document.querySelector("#api-settings");
 let analyzedMovements = [];
 
 document.querySelector("#load-example").addEventListener("click", () => {
   payloadInput.value = JSON.stringify(EXAMPLE_PAYLOAD, null, 2);
-  payloadInput.focus();
+  setFileStatus("Datos de demostración cargados. Analízalos para ver el panel.");
+  fileInput.value = "";
 });
 
 document.querySelector("#analyze-button").addEventListener("click", () => {
   try {
     showDashboard(parseMovements(payloadInput.value));
     showResult("Análisis local listo.", "Los datos se procesaron en este navegador; no se enviaron a la API.", false);
+    dashboard.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     showResult("No se pudieron analizar los datos.", error.message, true);
   }
 });
 
+document.querySelector("#api-toggle").addEventListener("click", () => {
+  apiSettings.hidden = !apiSettings.hidden;
+  document.querySelector("#api-toggle").setAttribute("aria-expanded", String(!apiSettings.hidden));
+  if (!apiSettings.hidden) secretInput.focus();
+});
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) loadReportFile(fileInput.files[0]);
+});
+
+dropZone.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  dropZone.classList.add("dragging");
+});
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragging"));
+dropZone.addEventListener("drop", (event) => {
+  event.preventDefault();
+  dropZone.classList.remove("dragging");
+  if (event.dataTransfer.files.length) loadReportFile(event.dataTransfer.files[0]);
+});
+
 movementFilter.addEventListener("change", renderMovementTable);
 emailForm.addEventListener("submit", preparePartnerEmail);
+
+function setFileStatus(message, isError = false) {
+  fileStatus.textContent = message;
+  fileStatus.classList.toggle("file-status-error", isError);
+}
+
+async function loadReportFile(file) {
+  try {
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error("El archivo supera el límite de 5 MB.");
+    }
+
+    const text = await file.text();
+    const extension = file.name.split(".").pop().toLowerCase();
+    let movements;
+    if (extension === "csv") {
+      movements = parseCsvMovements(text);
+    } else if (extension === "json") {
+      movements = parseMovements(text);
+    } else {
+      throw new Error("Elige un archivo con extensión .csv o .json.");
+    }
+
+    payloadInput.value = JSON.stringify({ movimientos: movements }, null, 2);
+    setFileStatus(`${file.name} · ${formatNumber(movements.length)} movimientos listos para analizar.`);
+    showResult("Informe cargado.", "El archivo permanece en este navegador hasta que decidas analizarlo o enviarlo a Vercel.", false);
+    fileInput.value = "";
+  } catch (error) {
+    setFileStatus(error instanceof Error ? error.message : "No se pudo leer el archivo.", true);
+    showResult("No se pudo cargar el informe.", error instanceof Error ? error.message : "Revisa el archivo e inténtalo de nuevo.", true);
+    payloadInput.value = "";
+    fileInput.value = "";
+  }
+}
+
+function parseCsvMovements(value) {
+  const text = value.replace(/^\uFEFF/, "");
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (quoted) {
+      if (character === '"' && text[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        cell += character;
+      }
+    } else if (character === '"' && cell.length === 0) {
+      quoted = true;
+    } else if (character === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (character === "\n" || character === "\r") {
+      row.push(cell);
+      if (row.some((value) => value !== "")) rows.push(row);
+      row = [];
+      cell = "";
+      if (character === "\r" && text[index + 1] === "\n") index += 1;
+    } else {
+      cell += character;
+    }
+  }
+
+  if (quoted) throw new Error("El CSV contiene una celda con comillas sin cerrar.");
+  row.push(cell);
+  if (row.some((value) => value !== "")) rows.push(row);
+  if (rows.length < 2) throw new Error("El CSV debe incluir encabezados y al menos un movimiento.");
+
+  const headers = rows[0].map((header) => header.trim());
+  const requiredHeaders = ["id_transaccion", "fecha", "cuenta_id", "monto_num", "estado"];
+  const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
+  if (missingHeaders.length) {
+    throw new Error(`No reconozco este CSV del robot EV2: faltan ${missingHeaders.join(", ")}.`);
+  }
+
+  return rows.slice(1).map((cells, index) => {
+    if (cells.length !== headers.length) {
+      throw new Error(`La fila ${index + 2} del CSV tiene un número de columnas distinto al encabezado.`);
+    }
+    const movement = {};
+    headers.forEach((header, index) => {
+      const value = (cells[index] ?? "").trim();
+      if (value === "") {
+        movement[header] = null;
+      } else if (["monto_num", "limite_monto"].includes(header) && Number.isFinite(Number(value))) {
+        movement[header] = Number(value);
+      } else if (header === "en_maestro" && /^(true|false)$/i.test(value)) {
+        movement[header] = value.toLowerCase() === "true";
+      } else if (header === "estado") {
+        movement[header] = value.toUpperCase();
+      } else {
+        movement[header] = value;
+      }
+    });
+    return movement;
+  });
+}
 
 function showResult(title, detail, isError = false) {
   result.hidden = false;
@@ -79,6 +209,9 @@ function parseMovements(value) {
   }
   if (payload.movimientos.some((movement) => !movement || typeof movement !== "object" || Array.isArray(movement))) {
     throw new Error("Cada movimiento debe ser un objeto JSON.");
+  }
+  if (payload.movimientos.length === 0) {
+    throw new Error("El informe no contiene movimientos para analizar.");
   }
   return payload.movimientos;
 }
@@ -356,14 +489,19 @@ function downloadCsv(blob) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   result.hidden = true;
+  if (!secretInput.value.trim()) {
+    showResult("Falta el secreto de la API.", "Ábrelo en “Generar CSV en Vercel” e ingresa ALERT_API_SECRET. Para revisar datos no necesitas el secreto.", true);
+    return;
+  }
+
   let payload;
 
   try {
-    payload = JSON.parse(payloadInput.value);
+    payload = { movimientos: parseMovements(payloadInput.value) };
     showDashboard(parseMovements(payloadInput.value));
   } catch (error) {
     showResult(
-      "El JSON no es válido.",
+      "El informe no es válido.",
       error instanceof Error ? error.message : "Revisa el formato del contenido e inténtalo de nuevo.",
       true
     );
@@ -405,8 +543,6 @@ form.addEventListener("submit", async (event) => {
     );
   } finally {
     submitButton.disabled = false;
-    buttonLabel.textContent = "Analizar y generar reporte";
+    buttonLabel.textContent = "Generar CSV y enviar alerta";
   }
 });
-
-payloadInput.value = JSON.stringify(EXAMPLE_PAYLOAD, null, 2);
