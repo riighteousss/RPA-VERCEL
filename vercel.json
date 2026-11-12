@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/alerta.py": {
+      "maxDuration": 30
+    }
+  }
+}

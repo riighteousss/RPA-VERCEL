@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101a30">
+    <meta
+      name="description"
+      content="Panel de alertas EV2 para analizar movimientos y descargar reportes CSV."
+    >
+    <title>EV2 | Alertas de movimientos</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="layout">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="EV2 inicio">
+          <span class="brand-mark" aria-hidden="true">E</span>
+          <span>EV<span class="brand-accent">2</span></span>
+        </a>
+        <span class="status-pill"><span class="status-dot"></span> ALERTAS DE MOVIMIENTOS</span>
+      </header>
+
+      <section class="intro">
+        <p class="eyebrow">MONITOREO Y CONTROL</p>
+        <h1>Detecta lo que<br>necesita <span>atencion.</span></h1>
+        <p class="intro-copy">
+          Analiza los movimientos procesados por tu robot, recibe avisos de
+          discrepancias y descarga el reporte para continuar la revision.
+        </p>
+      </section>
+
+      <section class="panel" aria-labelledby="panel-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">HERRAMIENTA DE PRUEBA</p>
+            <h2 id="panel-title">Probar un reporte</h2>
+          </div>
+          <span class="api-label"><span class="api-dot"></span> API protegida</span>
+        </div>
+
+        <form id="alert-form">
+          <label for="secret">Secreto de la API</label>
+          <input
+            id="secret"
+            name="secret"
+            type="password"
+            autocomplete="off"
+            placeholder="Pega ALERT_API_SECRET"
+            required
+          >
+          <p class="hint">Solo se usa para esta solicitud; no se guarda en el navegador.</p>
+          <p class="hint">El ejemplo incluye REVISAR: si Resend esta configurado, enviara un correo real. Cambia su estado a OK para probar el CSV sin enviar alertas.</p>
+
+          <div class="field-heading">
+            <label for="payload">Movimientos en formato JSON</label>
+            <button class="text-button" id="load-example" type="button">Cargar ejemplo</button>
+          </div>
+          <textarea id="payload" name="payload" spellcheck="false" required></textarea>
+
+          <button class="submit-button" id="submit-button" type="submit">
+            <span id="button-label">Analizar y generar reporte</span>
+            <span aria-hidden="true">→</span>
+          </button>
+        </form>
+
+        <div id="result" class="result" role="status" aria-live="polite" hidden>
+          <span class="result-icon" id="result-icon" aria-hidden="true"></span>
+          <div>
+            <p id="result-title"></p>
+            <p id="result-detail"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow" aria-label="Flujo de trabajo">
+        <div><span class="step-number">01</span><span>Analiza en tu robot local</span></div>
+        <span class="workflow-arrow" aria-hidden="true">→</span>
+        <div><span class="step-number">02</span><span>Detecta discrepancias</span></div>
+        <span class="workflow-arrow" aria-hidden="true">→</span>
+        <div><span class="step-number">03</span><span>Descarga y recibe alertas</span></div>
+      </section>
+
+      <footer>
+        <span>EV2 · Robot local, reportes en la nube</span>
+        <span>El correo solo se envia si hay movimientos <strong>REVISAR</strong>.</span>
+      </footer>
+    </main>
+  </body>
+</html>

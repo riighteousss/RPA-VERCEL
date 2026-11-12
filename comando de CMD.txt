@@ -1,0 +1,4 @@
+cls; py robot_ep2.py
+
+
+Puede variar dependiendo del entorno donde este instalado pero la idea es iniciarlo , puede ser en vsc sin problemas
