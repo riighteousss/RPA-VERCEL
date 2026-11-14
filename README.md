@@ -62,6 +62,8 @@ falla, registra el error y conserva los reportes locales.
 La solicitud requiere `Authorization: Bearer <ALERT_API_SECRET>` y un JSON con
 `movimientos`, lista de filas que incluya `estado` (`OK` o `REVISAR`). La
 respuesta exitosa es `text/csv`. Se aceptan hasta 5000 filas por llamada.
+El cuerpo de cada solicitud tiene un límite de 1 MB; los lotes grandes pueden
+revisarse directamente en el panel, que procesa los archivos en el navegador.
 
 El panel acepta uno o varios CSV del robot o archivos JSON, o permite
 pegar/editar el JSON. Los informes seleccionados se consolidan en un resumen
