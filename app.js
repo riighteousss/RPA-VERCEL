@@ -224,9 +224,12 @@ function getMovementIssues(movements) {
   const idCounts = new Map();
   const duplicateCounts = new Map();
   for (const movement of movements) {
+    const report = movement._informe || "Informe actual";
     const id = String(movement.id_transaccion ?? "").trim();
-    if (id) idCounts.set(id, (idCounts.get(id) || 0) + 1);
+    const idKey = JSON.stringify([report, id]);
+    if (id) idCounts.set(idKey, (idCounts.get(idKey) || 0) + 1);
     const key = JSON.stringify([
+      report,
       movement.fecha,
       movement.cuenta_id,
       movement.accion,
@@ -246,8 +249,11 @@ function getMovementIssues(movements) {
     };
 
     const id = String(movement.id_transaccion ?? "").trim();
-    if (id && idCounts.get(id) > 1) addIssue("id de transacción duplicado");
+    const report = movement._informe || "Informe actual";
+    const idKey = JSON.stringify([report, id]);
+    if (id && idCounts.get(idKey) > 1) addIssue("id de transacción duplicado");
     const duplicateKey = JSON.stringify([
+      report,
       movement.fecha,
       movement.cuenta_id,
       movement.accion,

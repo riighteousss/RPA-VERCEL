@@ -6,8 +6,22 @@ from urllib.parse import urlsplit
 
 import requests
 
+from api.alerta import generar_csv
+
 
 TIMEOUT_VERCEL = 15
+
+
+def guardar_reporte_csv_local(df_movimientos, ruta_csv):
+    """Genera un CSV validado localmente para cargarlo en el panel."""
+    movimientos = json.loads(df_movimientos.to_json(
+        orient="records", date_format="iso", force_ascii=False
+    ))
+    contenido = generar_csv(movimientos)
+    os.makedirs(os.path.dirname(os.path.abspath(ruta_csv)), exist_ok=True)
+    with open(ruta_csv, "wb") as archivo:
+        archivo.write(contenido)
+    return ruta_csv
 
 
 def enviar_reporte_vercel(df_movimientos, ruta_csv):

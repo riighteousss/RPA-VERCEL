@@ -10,9 +10,11 @@ envia correos ni almacena informes.
 1. Importa el repositorio en Vercel y deja **Root Directory** en la raiz del
    repositorio (`./`), donde estan `index.html` y `api/alerta.py`. La funcion
    Python se detecta desde `api/alerta.py`.
-2. En **Settings > Environment Variables**, agrega `ALERT_API_SECRET`: secreto
-   aleatorio compartido con el robot.
-3. Genera un valor largo y aleatorio para `ALERT_API_SECRET` (por ejemplo,
+2. Solo si vas a usar **Generar CSV en Vercel** o llamar a la API directamente,
+   en **Settings > Environment Variables** agrega `ALERT_API_SECRET`: un secreto
+   aleatorio compartido con quien llame a la API. La carga automática del robot
+   en el panel no necesita esta variable.
+3. Si configuraste `ALERT_API_SECRET`, genera un valor largo y aleatorio (por ejemplo,
    `py -c "import secrets; print(secrets.token_urlsafe(32))"`), guardalo como
    variable de entorno en Vercel y vuelve a desplegar. La API exige un secreto
    de al menos 32 caracteres. No lo escribas en el
@@ -40,22 +42,22 @@ navegador; la primera ejecución requiere conexión a internet.
 Las dependencias del robot están en `requirements-robot.txt` para que Vercel no
 las instale dentro de la función API, que no las necesita.
 
-Para publicar el resultado en Vercel, configura en la misma ventana de
-PowerShell la URL `/api/alerta` del proyecto y el mismo secreto que `ALERT_API_SECRET`
-en Vercel:
+Ejecuta el robot para generar los informes locales y abrir automáticamente el
+panel de Vercel:
 
 ```powershell
-$env:VERCEL_ALERT_URL = "https://tu-proyecto.vercel.app/api/alerta"
-$env:VERCEL_ALERT_SECRET = "el-mismo-secreto-configurado-en-vercel"
 & .\.venv\Scripts\python.exe .\robot_ep2.py
 ```
 
-El robot conserva sus reportes Excel en `output` y, si Vercel está configurado,
-publica los movimientos analizados en la API y guarda el CSV devuelto como
-`output/Reporte_Alerta_Vercel_<fecha>.csv`. Después puedes cargar ese CSV en el
-panel de Vercel para consultar sus gráficos y hallazgos. Sin ambas variables el
-robot sigue funcionando en local, sin conectarse a Vercel. Si la publicación
-falla, registra el error y conserva los reportes locales.
+El robot conserva sus reportes Excel y genera un CSV seguro para el panel como
+`output/Reporte_Alerta_Vercel_<fecha>.csv`. Después abre Chrome, entra al panel
+configurado en `VERCEL_DASHBOARD_URL` y carga todos los CSV de ese directorio
+para consolidarlos. Si no defines esa variable, usa el despliegue EV2 actual.
+Cuando el despliegue solicite autenticación de GitHub, inicia sesión en la
+ventana de Chrome y presiona Enter en PowerShell; el robot continuará y dejará
+el panel abierto hasta que presiones Enter otra vez. El usuario debe completar
+ese acceso porque Vercel protege el despliegue. Esta carga desde el navegador
+no requiere `ALERT_API_SECRET`.
 
 ## Contrato de la API
 
@@ -69,8 +71,9 @@ El panel acepta uno o varios CSV del robot o archivos JSON, o permite
 pegar/editar el JSON. Los informes seleccionados se consolidan en un resumen
 general en el navegador, con su nombre de archivo visible en las tablas.
 **Generar CSV en Vercel** es opcional: solicita el secreto en ese momento, lo
-usa solo para esa llamada y descarga el CSV de la API. Para el flujo habitual,
-el robot local llama directamente a la API con sus variables de entorno.
+usa solo para esa llamada y descarga el CSV de la API. El flujo automatizado del
+robot no usa esta API para crear el CSV; lo genera localmente y lo carga desde
+Chrome.
 
 ## Panel general de informes
 

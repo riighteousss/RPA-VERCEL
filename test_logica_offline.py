@@ -407,6 +407,74 @@ class TestAPIAlertaVercel(unittest.TestCase):
         self.assertIn(b"'=1+1", contenido)
 
 class TestClienteVercel(unittest.TestCase):
+    def test_guarda_csv_local_para_el_panel(self):
+        df = pd.DataFrame([{
+            "id_transaccion": "1",
+            "titular": "=formula",
+            "monto_num": 12.5,
+            "estado": "REVISAR",
+        }])
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = os.path.join(carpeta, "reporte.csv")
+            guardado = alertas_vercel.guardar_reporte_csv_local(df, ruta)
+            with open(ruta, "rb") as archivo:
+                contenido = archivo.read()
+
+        self.assertEqual(guardado, ruta)
+        self.assertIn(b"'=formula", contenido)
+        self.assertIn(b"REVISAR", contenido)
+
+    def test_subir_todos_los_csv_al_panel_y_dejarlo_visible(self):
+        class Elemento:
+            def __init__(self):
+                self.archivos = None
+
+            def send_keys(self, archivos):
+                self.archivos = archivos
+
+            def get_attribute(self, atributo):
+                return None if atributo == "hidden" else "multiple"
+
+        class Navegador:
+            current_url = "https://panel.example/"
+
+            def __init__(self):
+                self.archivos = Elemento()
+                self.quit_llamado = False
+
+            def get(self, url):
+                self.current_url = url
+
+            def find_element(self, by, valor):
+                if valor == "report-file":
+                    return self.archivos
+                if valor == "dashboard":
+                    return Elemento()
+                raise AssertionError(valor)
+
+            def execute_script(self, *args):
+                pass
+
+            def quit(self):
+                self.quit_llamado = True
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            rutas = [os.path.join(carpeta, nombre) for nombre in ("uno.csv", "dos.csv")]
+            for ruta in rutas:
+                with open(ruta, "w", encoding="utf-8") as archivo:
+                    archivo.write("estado\nOK\n")
+            navegador = Navegador()
+            with patch.dict(os.environ, {"VERCEL_DASHBOARD_URL": "https://panel.example/"}), \
+                    patch.object(robot_ep2, "iniciar_driver", return_value=navegador), \
+                    patch("builtins.input"):
+                robot_ep2.mostrar_informes_en_panel(rutas)
+
+        self.assertEqual(
+            navegador.archivos.archivos,
+            "\n".join(os.path.abspath(ruta) for ruta in rutas),
+        )
+        self.assertTrue(navegador.quit_llamado)
+
     def test_sin_configuracion_mantiene_el_modo_local(self):
         with patch.dict(os.environ, {}, clear=True), tempfile.TemporaryDirectory() as carpeta:
             resultado = alertas_vercel.enviar_reporte_vercel(
@@ -443,7 +511,7 @@ class TestClienteVercel(unittest.TestCase):
         self.assertEqual(resultado["estado"], "generado")
         self.assertEqual(contenido, respuesta.content)
 
-    def test_fase_datos_publica_las_filas_analizadas_despues_de_los_reportes(self):
+    def test_fase_datos_guarda_csv_local_despues_de_los_reportes(self):
         web = {
             "movimientos": [{
                 "id_transaccion": "1", "fecha": "2026-09-08 01:40",
@@ -457,9 +525,7 @@ class TestClienteVercel(unittest.TestCase):
         with patch.object(robot_ep2, "leer_maestro", return_value=MAESTRO_PRUEBA), \
                 patch.object(robot_ep2, "guardar_excel", side_effect=lambda hojas, ruta: ruta), \
                 patch.object(robot_ep2, "graficar_dispersion", return_value="grafico.png"), \
-                patch.object(robot_ep2, "enviar_reporte_vercel", return_value={
-                    "estado": "desactivado", "ruta_csv": None,
-                }) as publicar, \
+                patch.object(robot_ep2, "guardar_reporte_csv_local") as guardar_csv, \
                 patch.object(robot_ep2, "api_testfire", return_value={
                     "login_status": 200, "sin_token_status": 401, "tx_status": 200,
                     "n_tx_api": 1,
@@ -470,9 +536,9 @@ class TestClienteVercel(unittest.TestCase):
                 patch.object(robot_ep2, "resumen_evidencia", return_value=[]):
             robot_ep2.fase_datos(web, [{"fuente": "respaldo local"}], time.time())
 
-        filas_enviadas = publicar.call_args.args[0]
-        self.assertEqual(filas_enviadas.iloc[0]["estado"], "REVISAR")
-        self.assertTrue(publicar.call_args.args[1].endswith(".csv"))
+        filas_guardadas = guardar_csv.call_args.args[0]
+        self.assertEqual(filas_guardadas.iloc[0]["estado"], "REVISAR")
+        self.assertTrue(guardar_csv.call_args.args[1].endswith(".csv"))
 
 
 class TestXPathSobreHTMLGuardado(unittest.TestCase):
