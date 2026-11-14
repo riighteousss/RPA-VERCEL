@@ -8,7 +8,7 @@
       name="description"
       content="Centro de control EV2 para revisar movimientos, detectar anomalías y generar reportes."
     >
-    <title>EV2 | Alertas de movimientos</title>
+    <title>EV2 | Panel de informes</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
   </head>
@@ -47,8 +47,8 @@
             <span class="upload-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14.5v4A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
-            <span class="upload-copy"><strong>Arrastra tu informe aquí o <span>selecciona un archivo</span></strong><small>CSV del robot de EV2 o archivo JSON · Máximo 5 MB</small></span>
-            <input id="report-file" type="file" accept=".csv,.json,text/csv,application/json">
+            <span class="upload-copy"><strong>Arrastra tus informes aquí o <span>selecciona archivos</span></strong><small>Uno o varios CSV del robot de EV2 o archivos JSON · Máximo 5 MB por archivo</small></span>
+            <input id="report-file" type="file" accept=".csv,.json,text/csv,application/json" multiple>
           </label>
           <p id="file-status" class="file-status" role="status" aria-live="polite">También puedes <button class="text-button" id="load-example" type="button">cargar datos de demostración</button> para explorar el panel.</p>
 
@@ -71,9 +71,9 @@
           <div id="api-settings" class="api-settings" hidden>
             <label for="secret">Secreto de la API</label>
             <input id="secret" name="secret" type="password" autocomplete="off" placeholder="ALERT_API_SECRET">
-            <p class="hint">Se usa solo en esta solicitud y no se guarda en el navegador. La API genera el CSV y envía la alerta si encuentra filas REVISAR.</p>
+            <p class="hint">Se usa solo en esta solicitud y no se guarda en el navegador. La API devuelve el CSV; el análisis y la revisión permanecen en esta página.</p>
             <button class="secondary-button" id="submit-button" type="submit">
-              <span id="button-label">Generar CSV y enviar alerta</span>
+              <span id="button-label">Generar CSV</span>
               <span aria-hidden="true">↗</span>
             </button>
           </div>
@@ -98,6 +98,10 @@
         </div>
 
         <div class="metric-grid" aria-label="Resumen de datos">
+          <article class="metric-card">
+            <span class="metric-label">Informes consolidados</span>
+            <strong id="metric-reports">0</strong>
+          </article>
           <article class="metric-card">
             <span class="metric-label">Movimientos</span>
             <strong id="metric-total">0</strong>
@@ -147,6 +151,7 @@
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>Informe</th>
                   <th>Fecha</th>
                   <th>Cuenta</th>
                   <th>Acción</th>
@@ -163,8 +168,8 @@
         <article class="panel review-panel">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">SEGUIMIENTO</p>
-              <h3>Valores para revisar</h3>
+              <p class="eyebrow">REVISIÓN</p>
+              <h3>Valores anómalos</h3>
             </div>
             <span id="review-count" class="review-count"></span>
           </div>
@@ -175,6 +180,7 @@
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>Informe</th>
                   <th>Cuenta</th>
                   <th>Monto</th>
                   <th>Hallazgo</th>
@@ -184,21 +190,12 @@
               <tbody id="review-rows"></tbody>
             </table>
           </div>
-          <form id="partner-email-form" class="partner-form">
-            <label for="partner-emails">Correo(s) de los socios</label>
-            <input id="partner-emails" name="partner-emails" type="text" placeholder="socio@empresa.com, otro@empresa.com" autocomplete="email">
-            <label for="follow-up-note">Solicitud de revisión o seguimiento</label>
-            <textarea id="follow-up-note" name="follow-up-note" rows="3" placeholder="Por favor, revisen estos movimientos y confirmen los próximos pasos."></textarea>
-            <button class="secondary-button email-button" type="submit">Preparar correo a socios</button>
-            <p class="hint email-hint">Abre tu aplicación de correo con un borrador; no envía el mensaje automáticamente. No se transmiten los datos hasta que tú lo envíes.</p>
-            <p id="email-result" class="email-result" role="status" aria-live="polite"></p>
-          </form>
         </article>
       </section>
 
       <footer>
         <span class="footer-brand">EV2 <span>·</span> CONTROL DE MOVIMIENTOS</span>
-        <span>Robot local · Panel en la nube · Alertas automáticas sujetas a configuración</span>
+        <span>Robot local · Panel Vercel · Revisión y reportes en la página</span>
       </footer>
     </main>
   </body>

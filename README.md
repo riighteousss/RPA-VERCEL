@@ -1,22 +1,17 @@
-# EV2: robot local y alertas en Vercel
+# EV2: robot local y panel de informes en Vercel
 
 El robot Selenium sigue ejecutandose en el PC del usuario. Desplegar esta carpeta
-en Vercel publica una pagina web (`/`) para probar la API y la funcion
-`POST /api/alerta`: recibe movimientos que el robot ya analizo, devuelve un CSV
-descargable y envia un correo con ese reporte unicamente cuando existe al menos
-una fila con estado `REVISAR`.
+en Vercel publica una pagina web (`/`) para analizar y consolidar informes. La
+funcion `POST /api/alerta` valida movimientos y devuelve un CSV descargable; no
+envia correos ni almacena informes.
 
 ## Desplegar la API
 
 1. Importa el repositorio en Vercel y deja **Root Directory** en la raiz del
    repositorio (`./`), donde estan `index.html` y `api/alerta.py`. La funcion
    Python se detecta desde `api/alerta.py`.
-2. En **Settings > Environment Variables**, agrega:
-   - `ALERT_API_SECRET`: secreto aleatorio compartido con el robot.
-   - `RESEND_API_KEY`: clave de API de Resend.
-   - `ALERT_EMAIL_FROM`: remitente validado en Resend, por ejemplo
-     `Alertas EV2 <alertas@tu-dominio.com>`.
-   - `ALERT_EMAIL_TO`: direccion que recibira las alertas.
+2. En **Settings > Environment Variables**, agrega `ALERT_API_SECRET`: secreto
+   aleatorio compartido con el robot.
 3. Genera un valor largo y aleatorio para `ALERT_API_SECRET` (por ejemplo,
    `py -c "import secrets; print(secrets.token_urlsafe(32))"`), guardalo como
    variable de entorno en Vercel y vuelve a desplegar. La API exige un secreto
@@ -24,10 +19,6 @@ una fila con estado `REVISAR`.
    codigo ni lo compartas en archivos versionados.
 4. Copia la URL desplegada. Abre `https://tu-proyecto.vercel.app/` para usar la
    pagina de prueba o `https://tu-proyecto.vercel.app/api/alerta` para la API.
-
-Resend solo acepta remitentes de dominios que hayas verificado en su cuenta.
-La funcion usa sus variables de entorno; las credenciales no se envian desde
-el robot.
 
 ## Preparar y ejecutar el robot local
 
@@ -60,30 +51,28 @@ $env:VERCEL_ALERT_SECRET = "el-mismo-secreto-configurado-en-vercel"
 ```
 
 El robot conserva sus reportes Excel en `output` y, si Vercel está configurado,
-envía directamente los movimientos analizados a la API y guarda el CSV devuelto
-como `output/Reporte_Alerta_Vercel_<fecha>.csv`. Después puedes cargar ese CSV
-en el panel de Vercel para consultar sus gráficos y hallazgos. Sin ambas
-variables el robot sigue funcionando en local, sin conectarse a Vercel. Si el
-envío falla, registra el error y conserva los reportes locales.
+publica los movimientos analizados en la API y guarda el CSV devuelto como
+`output/Reporte_Alerta_Vercel_<fecha>.csv`. Después puedes cargar ese CSV en el
+panel de Vercel para consultar sus gráficos y hallazgos. Sin ambas variables el
+robot sigue funcionando en local, sin conectarse a Vercel. Si la publicación
+falla, registra el error y conserva los reportes locales.
 
 ## Contrato de la API
 
 La solicitud requiere `Authorization: Bearer <ALERT_API_SECRET>` y un JSON con
 `movimientos`, lista de filas que incluya `estado` (`OK` o `REVISAR`). La
-respuesta exitosa es `text/csv`; `X-Alert-Email` indica `enviado` o
-`no_requerido`. Se aceptan hasta 5000 filas por llamada. No se envia correo si
-ninguna fila esta marcada `REVISAR`.
+respuesta exitosa es `text/csv`. Se aceptan hasta 5000 filas por llamada.
 
-El panel acepta el CSV generado por el robot o un archivo JSON, o permite
-pegar/editar el JSON. **Analizar informe** presenta los datos en el navegador
-sin enviarlos. **Generar CSV en Vercel** es opcional: solicita el secreto en ese
-momento, lo usa solo para esa llamada y descarga el CSV de la API. Para el flujo
-habitual, el robot local llama directamente a la API con sus variables de
-entorno.
+El panel acepta uno o varios CSV del robot o archivos JSON, o permite
+pegar/editar el JSON. Los informes seleccionados se consolidan en un resumen
+general en el navegador, con su nombre de archivo visible en las tablas.
+**Generar CSV en Vercel** es opcional: solicita el secreto en ese momento, lo
+usa solo para esa llamada y descarga el CSV de la API. Para el flujo habitual,
+el robot local llama directamente a la API con sus variables de entorno.
 
-## Panel de resumen y seguimiento
+## Panel general de informes
 
-Usa **Analizar informe** para mostrar en el navegador un resumen de los
+Al cargar varios archivos, el panel muestra en el navegador un resumen de los
 movimientos, montos netos, cuentas involucradas, graficos de estados y motivos,
 una tabla filtrable y una lista de hallazgos. El analisis es local: no requiere
 el secreto ni transmite los datos. Considera los errores informados por el
@@ -91,22 +80,12 @@ robot y replica comprobaciones visibles de las reglas de negocio (por ejemplo,
 duplicados, cuentas no registradas, montos fuera de limite y signos
 incompatibles).
 Estos hallazgos solo se muestran en el panel y no reescriben los valores
-recibidos. El endpoint de correo automatico decide si alerta segun el campo
-`estado` enviado (`REVISAR`).
+recibidos. Los archivos se procesan solo en la sesión actual del navegador; no
+se guardan en Vercel ni se comparten entre usuarios o dispositivos porque el
+proyecto no cuenta con una base de datos configurada. La API solo valida y
+genera CSV; toda la revisión de informes se hace en esta página.
 
-En **Valores para revisar**, puedes indicar uno o varios correos de socios y
-una solicitud de seguimiento. **Preparar correo a socios** intenta abrir un
-borrador `mailto` en la aplicacion de correo configurada en el dispositivo. El
-usuario debe revisar y enviar ese mensaje; el panel no lo envia directamente y
-no confirma que se haya abierto una aplicacion.
-
-Esta opcion de borrador es distinta de las alertas automaticas del endpoint:
-esas alertas solo se envian por Resend al unico `ALERT_EMAIL_TO` configurado en
-Vercel cuando hay movimientos `REVISAR`. La entrega automatica a distintos
-socios requiere una integracion de correo en el servidor; el borrador local no
-la sustituye.
-
-Para validar cambios sin Selenium ni enviar correos reales, ejecuta:
+Para validar cambios sin Selenium, ejecuta:
 
 ```powershell
 & .\.venv\Scripts\python.exe .\test_logica_offline.py

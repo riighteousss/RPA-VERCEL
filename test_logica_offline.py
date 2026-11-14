@@ -6,7 +6,6 @@ servidor local de mentira que se levanta aca mismo.
 Ejecutar:  python test_logica_offline.py
 """
 
-import base64
 import glob
 import json
 import os
@@ -365,9 +364,6 @@ class TestAPIAlertaVercel(unittest.TestCase):
             "ALERT_API_SECRET": "s" * 43,
         }, clear=True)
         self.variables.start()
-        self.correo = patch("api.alerta.enviar_correo_resend")
-        self.enviar_correo = self.correo.start()
-        self.addCleanup(self.correo.stop)
         self.addCleanup(self.variables.stop)
 
     def post(self, movimientos, secreto="s" * 43):
@@ -378,78 +374,37 @@ class TestAPIAlertaVercel(unittest.TestCase):
             timeout=3,
         )
 
-    def test_sin_autorizacion_no_genera_reporte_ni_correo(self):
+    def test_sin_autorizacion_no_genera_reporte(self):
         respuesta = self.post([{"estado": "REVISAR"}], secreto="incorrecto")
         self.assertEqual(respuesta.status_code, 401)
-        self.enviar_correo.assert_not_called()
 
-    def test_fila_ok_devuelve_csv_sin_enviar_correo(self):
+    def test_fila_ok_devuelve_csv(self):
         respuesta = self.post([{
             "id_transaccion": "1", "monto_num": 12.5, "estado": "OK",
         }])
         self.assertEqual(respuesta.status_code, 200)
         self.assertTrue(respuesta.headers["Content-Type"].startswith("text/csv"))
-        self.assertEqual(respuesta.headers["X-Alert-Email"], "no_requerido")
+        self.assertNotIn("X-Alert-Email", respuesta.headers)
         self.assertIn(b"id_transaccion", respuesta.content)
-        self.enviar_correo.assert_not_called()
 
-    def test_fila_revisar_envia_correo_y_devuelve_csv(self):
+    def test_fila_revisar_devuelve_csv_sin_configuracion_de_correo(self):
         respuesta = self.post([{
             "id_transaccion": "2", "estado": "REVISAR",
             "errores_negocio": "cuenta no registrada en el maestro",
         }])
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.headers["X-Alert-Email"], "enviado")
-        self.enviar_correo.assert_called_once()
+        self.assertNotIn("X-Alert-Email", respuesta.headers)
+        self.assertIn(b"cuenta no registrada en el maestro", respuesta.content)
 
     def test_estado_invalido_se_rechaza(self):
         respuesta = self.post([{"estado": "OTRO"}])
         self.assertEqual(respuesta.status_code, 400)
-        self.enviar_correo.assert_not_called()
 
     def test_csv_escapa_contenido_que_podria_ser_formula(self):
         contenido = api_alerta.generar_csv([{
             "titular": "=1+1", "estado": "REVISAR",
         }])
         self.assertIn(b"'=1+1", contenido)
-
-    def test_falta_configuracion_resend_no_simula_envio(self):
-        self.correo.stop()
-        respuesta = self.post([{"estado": "REVISAR"}])
-        self.assertEqual(respuesta.status_code, 502)
-        self.assertEqual(respuesta.json()["error"], "Falta configurar Resend o el destinatario de alertas")
-
-    def test_cliente_resend_adjunta_csv_sin_conectar_a_internet(self):
-        self.correo.stop()
-
-        class RespuestaResend:
-            status = 200
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-        movimientos = [{"estado": "REVISAR"}]
-        csv_bytes = b"estado\nREVISAR\n"
-        with patch.dict(os.environ, {
-            "RESEND_API_KEY": "re_test_key",
-            "ALERT_EMAIL_FROM": "EV2 <alertas@example.com>",
-            "ALERT_EMAIL_TO": "persona@example.com",
-        }), patch("api.alerta.urlopen", return_value=RespuestaResend()) as urlopen_falso:
-            api_alerta.enviar_correo_resend(movimientos, csv_bytes)
-
-        solicitud = urlopen_falso.call_args.args[0]
-        contenido = json.loads(solicitud.data.decode("utf-8"))
-        self.assertEqual(solicitud.get_header("Authorization"), "Bearer re_test_key")
-        self.assertEqual(contenido["to"], ["persona@example.com"])
-        adjunto = contenido["attachments"][0]
-        self.assertEqual(
-            base64.b64decode(adjunto["content"]),
-            csv_bytes,
-        )
-
 
 class TestClienteVercel(unittest.TestCase):
     def test_sin_configuracion_mantiene_el_modo_local(self):
@@ -465,7 +420,6 @@ class TestClienteVercel(unittest.TestCase):
         respuesta = requests.Response()
         respuesta.status_code = 200
         respuesta.headers["Content-Type"] = "text/csv; charset=utf-8"
-        respuesta.headers["X-Alert-Email"] = "enviado"
         respuesta._content = b"id_transaccion,estado\n1,REVISAR\n"
         df = pd.DataFrame([{
             "id_transaccion": "1", "fecha": pd.Timestamp("2026-09-08"),
@@ -486,7 +440,7 @@ class TestClienteVercel(unittest.TestCase):
         self.assertEqual(enviado["headers"]["Authorization"], "Bearer secreto-local")
         self.assertEqual(enviado["json"]["movimientos"][0]["estado"], "REVISAR")
         self.assertEqual(enviado["json"]["movimientos"][0]["fecha"], "2026-09-08T00:00:00.000")
-        self.assertEqual(resultado["estado"], "enviado")
+        self.assertEqual(resultado["estado"], "generado")
         self.assertEqual(contenido, respuesta.content)
 
     def test_fase_datos_publica_las_filas_analizadas_despues_de_los_reportes(self):

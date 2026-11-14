@@ -1,14 +1,11 @@
-"""Vercel endpoint that returns a movement CSV and emails only review alerts."""
+"""Vercel endpoint that validates movement data and returns a CSV report."""
 
-import base64
 import csv
 import io
 import json
 import os
 import secrets
 from http.server import BaseHTTPRequestHandler
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 from urllib.parse import urlsplit
 
 
@@ -21,15 +18,10 @@ COLUMNAS_NUMERICAS = {"monto_num", "limite_monto"}
 MAX_BODY_BYTES = 1_000_000
 MAX_FILAS = 5000
 MAX_CARACTERES_CELDA = 10000
-RESEND_URL = "https://api.resend.com/emails"
 
 
 class SolicitudInvalida(ValueError):
     """The request body does not match the movement report contract."""
-
-
-class ErrorEnvioCorreo(Exception):
-    """Resend rejected or could not receive the alert email."""
 
 
 def _valor_csv(columna, valor):
@@ -87,46 +79,6 @@ def _validar_movimientos(datos):
             if columna in movimiento:
                 _valor_csv(columna, movimiento[columna])
     return movimientos
-
-
-def enviar_correo_resend(movimientos, csv_bytes):
-    api_key = os.environ.get("RESEND_API_KEY", "").strip()
-    remitente = os.environ.get("ALERT_EMAIL_FROM", "").strip()
-    destinatario = os.environ.get("ALERT_EMAIL_TO", "").strip()
-    if not api_key or not remitente or not destinatario:
-        raise ErrorEnvioCorreo("Falta configurar Resend o el destinatario de alertas")
-
-    cantidad = sum(fila["estado"] == "REVISAR" for fila in movimientos)
-    mensaje = {
-        "from": remitente,
-        "to": [destinatario],
-        "subject": "Alerta EV2: movimientos para revisar",
-        "text": (
-            f"El robot EV2 detecto {cantidad} movimiento(s) que requieren revision. "
-            "Se adjunta el reporte CSV completo."
-        ),
-        "attachments": [{
-            "filename": "reporte_movimientos_ev2.csv",
-            "content": base64.b64encode(csv_bytes).decode("ascii"),
-        }],
-    }
-    solicitud = Request(
-        RESEND_URL,
-        data=json.dumps(mensaje, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urlopen(solicitud, timeout=10) as respuesta:
-            if not 200 <= respuesta.status < 300:
-                raise ErrorEnvioCorreo(f"Resend respondio HTTP {respuesta.status}")
-    except HTTPError as error:
-        raise ErrorEnvioCorreo(f"Resend respondio HTTP {error.code}") from error
-    except (URLError, OSError, TimeoutError) as error:
-        raise ErrorEnvioCorreo("No se pudo conectar con Resend") from error
 
 
 def _json_respuesta(handler, codigo, datos):
@@ -196,23 +148,11 @@ class handler(BaseHTTPRequestHandler):
             self._error(400, str(error))
             return
 
-        requiere_alerta = any(fila["estado"] == "REVISAR" for fila in movimientos)
-        if requiere_alerta:
-            try:
-                enviar_correo_resend(movimientos, csv_bytes)
-            except ErrorEnvioCorreo as error:
-                self._error(502, str(error))
-                return
-            estado_correo = "enviado"
-        else:
-            estado_correo = "no_requerido"
-
         self.send_response(200)
         self.send_header("Content-Type", "text/csv; charset=utf-8")
         self.send_header("Content-Disposition", 'attachment; filename="reporte_movimientos_ev2.csv"')
         self.send_header("Content-Length", str(len(csv_bytes)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Alert-Email", estado_correo)
         self.end_headers()
         self.wfile.write(csv_bytes)
 

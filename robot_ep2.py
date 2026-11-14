@@ -391,13 +391,11 @@ def fase_datos(web, beneficiarios, t0):
     try:
         alerta = enviar_reporte_vercel(df_despues, ruta_alerta)
         if alerta["estado"] == "desactivado":
-            logger.info("Alertas Vercel desactivadas; se mantienen los reportes locales")
+            logger.info("Publicación en Vercel desactivada; se mantienen los reportes locales")
         else:
-            logger.info(
-                f"Reporte Vercel: correo={alerta['estado']}, CSV={alerta['ruta_csv']}"
-            )
+            logger.info(f"Reporte CSV generado en Vercel y guardado en {alerta['ruta_csv']}")
     except Exception:
-        logger.exception("No se pudo publicar el reporte en Vercel; los informes locales se conservaron")
+        logger.exception("No se pudo generar el CSV en Vercel; los informes locales se conservaron")
 
     logger.info("=== RESUMEN ===")
     for clave, valor in resumen.items():

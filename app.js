@@ -44,7 +44,6 @@ const resultTitle = document.querySelector("#result-title");
 const resultDetail = document.querySelector("#result-detail");
 const dashboard = document.querySelector("#dashboard");
 const movementFilter = document.querySelector("#movement-filter");
-const emailForm = document.querySelector("#partner-email-form");
 const fileInput = document.querySelector("#report-file");
 const dropZone = document.querySelector("#drop-zone");
 const fileStatus = document.querySelector("#file-status");
@@ -74,7 +73,7 @@ document.querySelector("#api-toggle").addEventListener("click", () => {
 });
 
 fileInput.addEventListener("change", () => {
-  if (fileInput.files.length) loadReportFile(fileInput.files[0]);
+  if (fileInput.files.length) loadReportFiles(Array.from(fileInput.files));
 });
 
 dropZone.addEventListener("dragover", (event) => {
@@ -85,38 +84,43 @@ dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragging
 dropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   dropZone.classList.remove("dragging");
-  if (event.dataTransfer.files.length) loadReportFile(event.dataTransfer.files[0]);
+  if (event.dataTransfer.files.length) loadReportFiles(Array.from(event.dataTransfer.files));
 });
 
 movementFilter.addEventListener("change", renderMovementTable);
-emailForm.addEventListener("submit", preparePartnerEmail);
 
 function setFileStatus(message, isError = false) {
   fileStatus.textContent = message;
   fileStatus.classList.toggle("file-status-error", isError);
 }
 
-async function loadReportFile(file) {
+async function loadReportFiles(files) {
   try {
-    if (file.size > 5 * 1024 * 1024) {
-      throw new Error("El archivo supera el límite de 5 MB.");
+    if (files.some((file) => file.size > 5 * 1024 * 1024)) {
+      throw new Error("Cada archivo debe pesar como máximo 5 MB.");
     }
 
-    const text = await file.text();
-    const extension = file.name.split(".").pop().toLowerCase();
-    let movements;
-    if (extension === "csv") {
-      movements = parseCsvMovements(text);
-    } else if (extension === "json") {
-      movements = parseMovements(text);
-    } else {
-      throw new Error("Elige un archivo con extensión .csv o .json.");
-    }
-
+    const reports = await Promise.all(files.map(async (file, index) => {
+      const extension = file.name.split(".").pop().toLowerCase();
+      const text = await file.text();
+      let movements;
+      if (extension === "csv") {
+        movements = parseCsvMovements(text);
+      } else if (extension === "json") {
+        movements = parseMovements(text);
+      } else {
+        throw new Error(`El archivo "${file.name}" no es CSV ni JSON.`);
+      }
+      const reportName = `${index + 1}. ${file.name}`;
+      return movements.map((movement) => ({ ...movement, _informe: reportName }));
+    }));
+    const movements = reports.flat();
     payloadInput.value = JSON.stringify({ movimientos: movements }, null, 2);
-    setFileStatus(`${file.name} · ${formatNumber(movements.length)} movimientos listos para analizar.`);
-    showResult("Informe cargado.", "El archivo permanece en este navegador hasta que decidas analizarlo o enviarlo a Vercel.", false);
+    setFileStatus(`${formatNumber(files.length)} informe(s) · ${formatNumber(movements.length)} movimientos listos para consolidar.`);
     fileInput.value = "";
+    showDashboard(movements);
+    showResult("Informes consolidados.", "Se analizaron en este navegador; no se enviaron al servidor.", false);
+    dashboard.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     setFileStatus(error instanceof Error ? error.message : "No se pudo leer el archivo.", true);
     showResult("No se pudo cargar el informe.", error instanceof Error ? error.message : "Revisa el archivo e inténtalo de nuevo.", true);
@@ -321,12 +325,14 @@ function showDashboard(movements) {
     return amount === null ? sum : sum + amount;
   }, 0);
   const accounts = new Set(movements.map((movement) => movement.cuenta_id).filter((account) => account !== null && account !== undefined && String(account).trim()));
+  const reports = new Set(movements.map((movement) => movement._informe || "Informe actual"));
 
+  document.querySelector("#metric-reports").textContent = formatNumber(reports.size);
   document.querySelector("#metric-total").textContent = formatNumber(movements.length);
   document.querySelector("#metric-review").textContent = formatNumber(flagged.length);
   document.querySelector("#metric-amount").textContent = formatNumber(totalAmount);
   document.querySelector("#metric-accounts").textContent = formatNumber(accounts.size);
-  document.querySelector("#dashboard-count").textContent = `${formatNumber(flagged.length)} de ${formatNumber(movements.length)} para revisar`;
+  document.querySelector("#dashboard-count").textContent = `${formatNumber(flagged.length)} de ${formatNumber(movements.length)} para revisar · ${formatNumber(reports.size)} informe(s)`;
   document.querySelector("#review-count").textContent = `${formatNumber(flagged.length)} hallazgo(s)`;
 
   renderBarChart(document.querySelector("#status-chart"), [
@@ -395,6 +401,7 @@ function renderMovementTable() {
     const row = document.createElement("tr");
     if (item.flagged) row.className = "flagged-row";
     appendCell(row, item.movement.id_transaccion);
+    appendCell(row, item.movement._informe || "Informe actual");
     appendCell(row, item.movement.fecha);
     appendCell(row, item.movement.cuenta_id);
     appendCell(row, item.movement.accion);
@@ -408,7 +415,7 @@ function renderMovementTable() {
   if (!rows.children.length) {
     const row = document.createElement("tr");
     const cell = appendCell(row, "No hay movimientos para este filtro.");
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = "empty-cell";
     rows.append(row);
   }
@@ -425,6 +432,7 @@ function renderReviewTable() {
   for (const item of flagged) {
     const row = document.createElement("tr");
     appendCell(row, item.movement.id_transaccion);
+    appendCell(row, item.movement._informe || "Informe actual");
     appendCell(row, item.movement.cuenta_id);
     const amount = parseAmount(item.movement.monto_num);
     appendCell(row, amount === null ? item.movement.monto_num : formatNumber(amount), "numeric-cell");
@@ -432,47 +440,6 @@ function renderReviewTable() {
     appendCell(row, item.movement.sugerencia || "Revisar el movimiento con el responsable de la cuenta.");
     rows.append(row);
   }
-}
-
-function preparePartnerEmail(event) {
-  event.preventDefault();
-  const status = document.querySelector("#email-result");
-  const recipients = document.querySelector("#partner-emails").value
-    .split(/[;,\s]+/)
-    .map((email) => email.trim())
-    .filter(Boolean);
-  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!recipients.length || recipients.some((email) => !validEmail.test(email))) {
-    status.textContent = "Ingresa uno o más correos válidos, separados por coma o punto y coma.";
-    status.classList.add("email-error");
-    return;
-  }
-
-  const flagged = analyzedMovements.filter((item) => item.flagged);
-  const shortValue = (value) => String(value ?? "—").replace(/[\r\n]+/g, " ").slice(0, 80);
-  const detailLines = flagged.slice(0, 15).map(({ movement, issues }) =>
-    `- ID ${shortValue(movement.id_transaccion)} | cuenta ${shortValue(movement.cuenta_id)} | monto ${shortValue(movement.monto_num)} | ${shortValue(issues.join("; "))}`
-  );
-  const omittedCount = flagged.length - detailLines.length;
-  if (omittedCount > 0) {
-    detailLines.push(`- y ${omittedCount} movimiento(s) adicional(es); consulta el reporte completo.`);
-  }
-  const note = document.querySelector("#follow-up-note").value.trim();
-  const body = [
-    "Hola,",
-    "",
-    note || "Solicito revisar los movimientos señalados y confirmar los próximos pasos.",
-    "",
-    `Resumen EV2: ${flagged.length} de ${analyzedMovements.length} movimiento(s) requieren revisión.`,
-    ...(detailLines.length ? ["", ...detailLines] : ["", "No hay hallazgos detectados; solicito confirmar si hace falta algún seguimiento."]),
-    "",
-    "Este borrador fue preparado desde el panel EV2."
-  ].join("\n");
-  const subject = `Solicitud de revisión/seguimiento EV2 (${flagged.length} hallazgo(s))`;
-  const mailto = `mailto:${recipients.map(encodeURIComponent).join(",")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  status.classList.remove("email-error");
-  status.textContent = "Se solicitará a tu aplicación de correo que abra un borrador; el mensaje no se envía automáticamente.";
-  window.location.href = mailto;
 }
 
 function downloadCsv(blob) {
@@ -528,21 +495,15 @@ form.addEventListener("submit", async (event) => {
 
     const blob = await response.blob();
     downloadCsv(blob);
-    const email = response.headers.get("X-Alert-Email");
-    showResult(
-      "Reporte CSV generado y descargado.",
-      email === "enviado"
-        ? "Se detectaron movimientos REVISAR y la API confirmó el envío de la alerta configurada."
-        : "La API no recibió movimientos con estado REVISAR; no envió alertas automáticas. Revisa también los hallazgos del análisis local."
-    );
+    showResult("Reporte CSV generado y descargado.", "El CSV se generó en Vercel. La revisión de datos permanece en este panel.");
   } catch (error) {
     showResult(
-      "No se pudo procesar el reporte.",
+      "No se pudo generar el CSV.",
       error instanceof Error ? error.message : "Error inesperado al conectar con la API. El análisis local sigue disponible.",
       true
     );
   } finally {
     submitButton.disabled = false;
-    buttonLabel.textContent = "Generar CSV y enviar alerta";
+    buttonLabel.textContent = "Generar CSV";
   }
 });

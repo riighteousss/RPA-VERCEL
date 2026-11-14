@@ -42,6 +42,6 @@ def enviar_reporte_vercel(df_movimientos, ruta_csv):
     with open(ruta_csv, "wb") as archivo:
         archivo.write(respuesta.content)
     return {
-        "estado": respuesta.headers.get("X-Alert-Email", "desconocido"),
+        "estado": "generado",
         "ruta_csv": ruta_csv,
     }
