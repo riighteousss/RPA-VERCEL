@@ -220,53 +220,67 @@ function parseMovements(value) {
   return payload.movimientos;
 }
 
+function hasAccountMissingFromMaster(movement) {
+  const isMissing = movement.en_maestro === false
+    || String(movement.en_maestro).trim().toLowerCase() === "false";
+  const reportedText = `${movement.observaciones || ""};${movement.errores_negocio || ""}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return isMissing || reportedText.includes("cuenta no registrada en el maestro");
+}
+
 function getMovementIssues(movements) {
   const idCounts = new Map();
-  const duplicateCounts = new Map();
   for (const movement of movements) {
     const report = movement._informe || "Informe actual";
     const id = String(movement.id_transaccion ?? "").trim();
     const idKey = JSON.stringify([report, id]);
     if (id) idCounts.set(idKey, (idCounts.get(idKey) || 0) + 1);
-    const key = JSON.stringify([
-      report,
-      movement.fecha,
-      movement.cuenta_id,
-      movement.accion,
-      movement.monto_num
-    ]);
-    duplicateCounts.set(key, (duplicateCounts.get(key) || 0) + 1);
   }
 
   return movements.map((movement) => {
-    const issues = String(movement.errores_negocio || "")
+    const normalizeIssue = (issue) => issue.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const issues = [];
+    const observations = String(movement.observaciones || "")
       .split(";")
       .map((issue) => issue.trim())
       .filter(Boolean);
-    const normalizeIssue = (issue) => issue.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const reportedIssues = String(movement.errores_negocio || "")
+      .split(";")
+      .map((issue) => issue.trim())
+      .filter(Boolean);
+    let ignoredLowConfidenceDuplicate = false;
     const addIssue = (issue) => {
       if (!issues.some((existing) => normalizeIssue(existing) === normalizeIssue(issue))) issues.push(issue);
     };
+    const addObservation = (issue) => {
+      if (!observations.some((existing) => normalizeIssue(existing) === normalizeIssue(issue))) observations.push(issue);
+    };
+
+    for (const issue of reportedIssues) {
+      const normalized = normalizeIssue(issue);
+      if (normalized === "posible movimiento duplicado") {
+        ignoredLowConfidenceDuplicate = true;
+      } else if (normalized === "cuenta no registrada en el maestro") {
+        addObservation(issue);
+      } else {
+        addIssue(issue);
+      }
+    }
 
     const id = String(movement.id_transaccion ?? "").trim();
     const report = movement._informe || "Informe actual";
     const idKey = JSON.stringify([report, id]);
     if (id && idCounts.get(idKey) > 1) addIssue("id de transacción duplicado");
-    const duplicateKey = JSON.stringify([
-      report,
-      movement.fecha,
-      movement.cuenta_id,
-      movement.accion,
-      movement.monto_num
-    ]);
-    if (duplicateCounts.get(duplicateKey) > 1) addIssue("posible movimiento duplicado");
 
     if (movement.cuenta_id === null || movement.cuenta_id === undefined || !String(movement.cuenta_id).trim()) {
       addIssue("cuenta ausente");
     }
-    if (movement.en_maestro === false) {
-      addIssue("cuenta no registrada en el maestro");
-    } else if (String(movement.estado_cuenta ?? "").trim().toLowerCase() !== "activa") {
+    const accountNotInMaster = hasAccountMissingFromMaster(movement);
+    if (accountNotInMaster) addObservation("cuenta no registrada en el maestro");
+    const accountState = String(movement.estado_cuenta ?? "").trim().toLowerCase();
+    if (!accountNotInMaster && accountState && accountState !== "activa") {
       addIssue("cuenta inactiva en el maestro");
     }
 
@@ -299,10 +313,13 @@ function getMovementIssues(movements) {
     } else {
       addIssue("fecha ausente");
     }
-    if (movement.estado === "REVISAR" && issues.length === 0) addIssue("marcado REVISAR por el robot");
+    if (movement.estado === "REVISAR" && issues.length === 0
+      && observations.length === 0 && !ignoredLowConfidenceDuplicate) {
+      addIssue("marcado REVISAR por el robot");
+    }
     if (movement.estado !== "OK" && movement.estado !== "REVISAR") addIssue("estado inválido o ausente");
 
-    return issues;
+    return { issues, observations };
   });
 }
 
@@ -320,17 +337,23 @@ function showDashboard(movements) {
   const movementIssues = getMovementIssues(movements);
   analyzedMovements = movements.map((movement, index) => ({
     movement,
-    issues: movementIssues[index],
-    flagged: movementIssues[index].length > 0 || movement.estado === "REVISAR"
+    issues: movementIssues[index].issues,
+    observations: movementIssues[index].observations,
+    flagged: movementIssues[index].issues.length > 0
   }));
   dashboard.hidden = false;
 
   const flagged = analyzedMovements.filter((item) => item.flagged);
+  const observedOnly = analyzedMovements.filter((item) => !item.flagged && item.observations.length > 0);
   const totalAmount = movements.reduce((sum, movement) => {
     const amount = parseAmount(movement.monto_num);
     return amount === null ? sum : sum + amount;
   }, 0);
   const accounts = new Set(movements.map((movement) => movement.cuenta_id).filter((account) => account !== null && account !== undefined && String(account).trim()));
+  const unregisteredAccounts = new Set(movements
+    .filter(hasAccountMissingFromMaster)
+    .map((movement) => String(movement.cuenta_id ?? "").trim())
+    .filter((account) => account !== null && account !== undefined && String(account).trim()));
   const reports = new Set(movements.map((movement) => movement._informe || "Informe actual"));
 
   document.querySelector("#metric-reports").textContent = formatNumber(reports.size);
@@ -338,11 +361,13 @@ function showDashboard(movements) {
   document.querySelector("#metric-review").textContent = formatNumber(flagged.length);
   document.querySelector("#metric-amount").textContent = formatNumber(totalAmount);
   document.querySelector("#metric-accounts").textContent = formatNumber(accounts.size);
+  document.querySelector("#metric-unregistered").textContent = formatNumber(unregisteredAccounts.size);
   document.querySelector("#dashboard-count").textContent = `${formatNumber(flagged.length)} de ${formatNumber(movements.length)} para revisar · ${formatNumber(reports.size)} informe(s)`;
-  document.querySelector("#review-count").textContent = `${formatNumber(flagged.length)} hallazgo(s)`;
+  document.querySelector("#review-count").textContent = `${formatNumber(flagged.length)} hallazgo(s) crítico(s)`;
 
   renderBarChart(document.querySelector("#status-chart"), [
-    { label: "OK", value: movements.length - flagged.length, className: "bar-ok" },
+    { label: "OK", value: movements.length - flagged.length - observedOnly.length, className: "bar-ok" },
+    { label: "Observación", value: observedOnly.length, className: "bar-info" },
     { label: "Para revisar", value: flagged.length, className: "bar-warning" }
   ]);
   const reasonCounts = new Map();
@@ -354,8 +379,36 @@ function showDashboard(movements) {
     [...reasonCounts].sort((a, b) => b[1] - a[1]).slice(0, 6)
       .map(([label, value]) => ({ label, value, className: "bar-warning" }))
   );
+  renderAccountObservations(movements);
   renderMovementTable();
   renderReviewTable();
+}
+
+function renderAccountObservations(movements) {
+  const counts = new Map();
+  for (const movement of movements) {
+    const notInMaster = hasAccountMissingFromMaster(movement);
+    const account = String(movement.cuenta_id ?? "").trim();
+    if (!notInMaster || !account) continue;
+    counts.set(account, (counts.get(account) || 0) + 1);
+  }
+
+  const panel = document.querySelector("#account-observations");
+  const list = document.querySelector("#account-observations-list");
+  list.replaceChildren();
+  panel.hidden = counts.size === 0;
+  if (!counts.size) return;
+
+  const movementCount = [...counts.values()].reduce((sum, count) => sum + count, 0);
+  document.querySelector("#account-observations-count").textContent =
+    `${formatNumber(counts.size)} cuenta(s) · ${formatNumber(movementCount)} movimiento(s)`;
+  document.querySelector("#account-observations-summary").textContent =
+    "Confirma si estas cuentas deben incorporarse al maestro. Se muestran como observación informativa y no cuentan como alertas críticas por sí solas.";
+  for (const [account, count] of [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    const item = document.createElement("li");
+    item.textContent = `Cuenta ${account}: ${formatNumber(count)} movimiento(s)`;
+    list.append(item);
+  }
 }
 
 function renderBarChart(container, items) {
@@ -403,9 +456,11 @@ function renderMovementTable() {
   const filter = movementFilter.value;
   for (const item of analyzedMovements) {
     if (filter === "review" && !item.flagged) continue;
-    if (filter === "ok" && item.flagged) continue;
+    if (filter === "observations" && (!item.observations.length || item.flagged)) continue;
+    if (filter === "ok" && (item.flagged || item.observations.length)) continue;
     const row = document.createElement("tr");
     if (item.flagged) row.className = "flagged-row";
+    else if (item.observations.length) row.className = "observation-row";
     appendCell(row, item.movement.id_transaccion);
     appendCell(row, item.movement._informe || "Informe actual");
     appendCell(row, item.movement.fecha);
@@ -413,9 +468,10 @@ function renderMovementTable() {
     appendCell(row, item.movement.accion);
     const amount = parseAmount(item.movement.monto_num);
     appendCell(row, amount === null ? item.movement.monto_num : formatNumber(amount), "numeric-cell");
-    const state = appendCell(row, item.flagged ? "REVISAR" : "OK");
-    state.className = item.flagged ? "status-cell status-review" : "status-cell status-ok";
-    appendCell(row, item.issues.join("; ") || "—");
+    const stateLabel = item.flagged ? "REVISAR" : item.observations.length ? "OBSERVAR" : "OK";
+    const state = appendCell(row, stateLabel);
+    state.className = `status-cell ${item.flagged ? "status-review" : item.observations.length ? "status-info" : "status-ok"}`;
+    appendCell(row, [...item.issues, ...item.observations].join("; ") || "—");
     rows.append(row);
   }
   if (!rows.children.length) {

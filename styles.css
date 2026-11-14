@@ -553,7 +553,8 @@ select:focus {
 }
 
 .dashboard[hidden],
-.review-panel [hidden] {
+.review-panel [hidden],
+.observation-panel[hidden] {
   display: none;
 }
 
@@ -579,7 +580,7 @@ select:focus {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 14px;
 }
@@ -679,6 +680,10 @@ select:focus {
   background: #e5a13e;
 }
 
+.bar-info {
+  background: #6592c4;
+}
+
 .bar-value {
   color: #36445b;
   font-size: 10px;
@@ -694,8 +699,19 @@ select:focus {
 }
 
 .data-panel,
-.review-panel {
+.review-panel,
+.observation-panel {
   margin-bottom: 14px;
+}
+
+.observation-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 18px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: #52647f;
+  font-size: 10px;
 }
 
 .section-heading {
@@ -787,8 +803,16 @@ select {
   color: var(--accent-dark) !important;
 }
 
+.status-info {
+  color: #4774a8 !important;
+}
+
 .flagged-row td {
   background: #fffbf5;
+}
+
+.observation-row td {
+  background: #f7faff;
 }
 
 .table-wrap td.empty-cell {

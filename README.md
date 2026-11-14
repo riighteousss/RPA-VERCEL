@@ -12,8 +12,8 @@ envia correos ni almacena informes.
    Python se detecta desde `api/alerta.py`.
 2. Solo si vas a usar **Generar CSV en Vercel** o llamar a la API directamente,
    en **Settings > Environment Variables** agrega `ALERT_API_SECRET`: un secreto
-   aleatorio compartido con quien llame a la API. La carga automática del robot
-   en el panel no necesita esta variable.
+   aleatorio compartido con quien llame a la API. La carga manual de los CSV
+   locales no necesita esta variable.
 3. Si configuraste `ALERT_API_SECRET`, genera un valor largo y aleatorio (por ejemplo,
    `py -c "import secrets; print(secrets.token_urlsafe(32))"`), guardalo como
    variable de entorno en Vercel y vuelve a desplegar. La API exige un secreto
@@ -42,22 +42,17 @@ navegador; la primera ejecución requiere conexión a internet.
 Las dependencias del robot están en `requirements-robot.txt` para que Vercel no
 las instale dentro de la función API, que no las necesita.
 
-Ejecuta el robot para generar los informes locales y abrir automáticamente el
-panel de Vercel:
+Ejecuta el robot para generar los informes localmente:
 
 ```powershell
 & .\.venv\Scripts\python.exe .\robot_ep2.py
 ```
 
 El robot conserva sus reportes Excel y genera un CSV seguro para el panel como
-`output/Reporte_Alerta_Vercel_<fecha>.csv`. Después abre Chrome, entra al panel
-configurado en `VERCEL_DASHBOARD_URL` y carga todos los CSV de ese directorio
-para consolidarlos. Si no defines esa variable, usa el despliegue EV2 actual.
-Cuando el despliegue solicite autenticación de GitHub, inicia sesión en la
-ventana de Chrome y presiona Enter en PowerShell; el robot continuará y dejará
-el panel abierto hasta que presiones Enter otra vez. El usuario debe completar
-ese acceso porque Vercel protege el despliegue. Esta carga desde el navegador
-no requiere `ALERT_API_SECRET`.
+`output/Reporte_Alerta_Vercel_<fecha>.csv`. El robot no abre el panel ni carga
+archivos automáticamente. Cuando quieras revisar los datos, abre el panel,
+selecciona uno o varios CSV desde `output` y cárgalos manualmente. Esta carga
+desde el navegador no requiere `ALERT_API_SECRET`.
 
 ## Contrato de la API
 
@@ -81,9 +76,12 @@ Al cargar varios archivos, el panel muestra en el navegador un resumen de los
 movimientos, montos netos, cuentas involucradas, graficos de estados y motivos,
 una tabla filtrable y una lista de hallazgos. El analisis es local: no requiere
 el secreto ni transmite los datos. Considera los errores informados por el
-robot y replica comprobaciones visibles de las reglas de negocio (por ejemplo,
-duplicados, cuentas no registradas, montos fuera de limite y signos
-incompatibles).
+robot y comprueba reglas de negocio con evidencia suficiente (IDs repetidos,
+cuentas inactivas, montos fuera de limite, fechas futuras y signos
+incompatibles). Una coincidencia de fecha, cuenta, accion y monto no basta para
+declarar un duplicado, porque el origen puede registrar varias operaciones por
+minuto. Las cuentas ausentes del maestro se muestran como observaciones
+agrupadas por cuenta, no como una alerta critica por cada movimiento.
 Estos hallazgos solo se muestran en el panel y no reescriben los valores
 recibidos. Los archivos se procesan solo en la sesión actual del navegador; no
 se guardan en Vercel ni se comparten entre usuarios o dispositivos porque el

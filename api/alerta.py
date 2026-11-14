@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 COLUMNAS = [
     "id_transaccion", "fecha", "cuenta_id", "accion", "monto_num", "titular",
     "tipo_cuenta", "estado_cuenta", "limite_monto", "en_maestro",
-    "errores_negocio", "sugerencia", "estado",
+    "errores_negocio", "observaciones", "sugerencia", "estado",
 ]
 COLUMNAS_NUMERICAS = {"monto_num", "limite_monto"}
 MAX_BODY_BYTES = 1_000_000

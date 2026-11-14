@@ -191,9 +191,11 @@ class TestReglasNegocio(unittest.TestCase):
         df, _ = self.aplicar([(1, "2026-09-08 01:40", "800002", "Deposit", 100.0)])
         self.assertEqual(df.iloc[0]["estado"], "OK")
 
-    def test_cuenta_fuera_del_maestro(self):
+    def test_cuenta_fuera_del_maestro_es_observacion_informativa(self):
         df, _ = self.aplicar([(1, "2026-09-08 01:40", "800011", "Deposit", 100.0)])
-        self.assertIn("cuenta no registrada en el maestro", reglas_de(df))
+        self.assertEqual(df.iloc[0]["estado"], "OK")
+        self.assertIn("cuenta no registrada en el maestro", df.iloc[0]["observaciones"])
+        self.assertEqual(reglas_de(df), [])
 
     def test_cuenta_inactiva(self):
         df, _ = self.aplicar([(1, "2026-09-08 01:40", "800009", "Deposit", 100.0)])
@@ -222,14 +224,14 @@ class TestReglasNegocio(unittest.TestCase):
         df, _ = self.aplicar([(1, "2999-01-01 10:00", "800002", "Deposit", 10.0)])
         self.assertIn("fecha futura", reglas_de(df))
 
-    def test_id_duplicado_y_movimiento_duplicado(self):
+    def test_solo_id_duplicado_se_marca_como_duplicado(self):
         df, _ = self.aplicar([(7, "2026-09-08 01:40", "800002", "Deposit", 10.0),
                               (7, "2026-09-08 01:41", "800002", "Deposit", 20.0),
                               (8, "2026-09-08 01:42", "800003", "Deposit", 30.0),
                               (9, "2026-09-08 01:42", "800003", "Deposit", 30.0)])
         self.assertIn("id de transaccion duplicado", reglas_de(df, 0))
-        self.assertIn("posible movimiento duplicado", reglas_de(df, 2))
-        self.assertNotIn("posible movimiento duplicado", reglas_de(df, 0))
+        self.assertEqual(reglas_de(df, 2), [])
+        self.assertEqual(reglas_de(df, 3), [])
 
     def test_cada_error_trae_su_sugerencia(self):
         df, _ = self.aplicar([(1, "2026-09-08 01:40", "800002", "Deposit", -5.0)])
@@ -238,7 +240,28 @@ class TestReglasNegocio(unittest.TestCase):
     def test_conteo_por_regla(self):
         _, conteo = self.aplicar([(1, "2026-09-08 01:40", "800011", "Deposit", 5.0),
                                   (2, "2026-09-08 01:41", "800011", "Deposit", 6.0)])
-        self.assertEqual(conteo["cuenta no registrada en el maestro"], 2)
+        self.assertEqual(conteo, {})
+
+    def test_100_movimientos_con_maestro_incompleto_no_se_marcan_todos(self):
+        filas = []
+        cuentas = ["800011", "800020", "800021"]
+        for indice in range(100):
+            filas.append({
+                "id_transaccion": str(1000 + indice),
+                "fecha": "2026-09-08 01:40",
+                "cuenta_id": cuentas[indice % len(cuentas)] if indice < 88 else "800002",
+                "accion": "Deposit",
+                "monto_num": 6000.0 if indice < 4 else 10.0,
+            })
+        df = enriquecer_con_maestro(pd.DataFrame(filas), MAESTRO_PRUEBA)
+
+        resultado, conteo = aplicar_reglas(df)
+
+        self.assertEqual(int((resultado["estado"] == "REVISAR").sum()), 4)
+        self.assertEqual(int(resultado["observaciones"].str.contains(
+            "cuenta no registrada en el maestro"
+        ).sum()), 88)
+        self.assertEqual(conteo, {"monto sobre el limite": 4})
 
 
 class TestExcel(unittest.TestCase):
@@ -386,6 +409,7 @@ class TestAPIAlertaVercel(unittest.TestCase):
         self.assertTrue(respuesta.headers["Content-Type"].startswith("text/csv"))
         self.assertNotIn("X-Alert-Email", respuesta.headers)
         self.assertIn(b"id_transaccion", respuesta.content)
+        self.assertIn(b"observaciones", respuesta.content)
 
     def test_fila_revisar_devuelve_csv_sin_configuracion_de_correo(self):
         respuesta = self.post([{
@@ -424,56 +448,15 @@ class TestClienteVercel(unittest.TestCase):
         self.assertIn(b"'=formula", contenido)
         self.assertIn(b"REVISAR", contenido)
 
-    def test_subir_todos_los_csv_al_panel_y_dejarlo_visible(self):
-        class Elemento:
-            def __init__(self):
-                self.archivos = None
+    def test_main_no_abre_el_panel_ni_carga_el_csv_automaticamente(self):
+        with patch.object(robot_ep2, "obtener_beneficiarios", return_value=[]), \
+                patch.object(robot_ep2, "fase_web", return_value={"movimientos": []}), \
+                patch.object(robot_ep2, "fase_datos") as fase_datos, \
+                patch.object(robot_ep2, "iniciar_driver") as iniciar_driver:
+            robot_ep2.main()
 
-            def send_keys(self, archivos):
-                self.archivos = archivos
-
-            def get_attribute(self, atributo):
-                return None if atributo == "hidden" else "multiple"
-
-        class Navegador:
-            current_url = "https://panel.example/"
-
-            def __init__(self):
-                self.archivos = Elemento()
-                self.quit_llamado = False
-
-            def get(self, url):
-                self.current_url = url
-
-            def find_element(self, by, valor):
-                if valor == "report-file":
-                    return self.archivos
-                if valor == "dashboard":
-                    return Elemento()
-                raise AssertionError(valor)
-
-            def execute_script(self, *args):
-                pass
-
-            def quit(self):
-                self.quit_llamado = True
-
-        with tempfile.TemporaryDirectory() as carpeta:
-            rutas = [os.path.join(carpeta, nombre) for nombre in ("uno.csv", "dos.csv")]
-            for ruta in rutas:
-                with open(ruta, "w", encoding="utf-8") as archivo:
-                    archivo.write("estado\nOK\n")
-            navegador = Navegador()
-            with patch.dict(os.environ, {"VERCEL_DASHBOARD_URL": "https://panel.example/"}), \
-                    patch.object(robot_ep2, "iniciar_driver", return_value=navegador), \
-                    patch("builtins.input"):
-                robot_ep2.mostrar_informes_en_panel(rutas)
-
-        self.assertEqual(
-            navegador.archivos.archivos,
-            "\n".join(os.path.abspath(ruta) for ruta in rutas),
-        )
-        self.assertTrue(navegador.quit_llamado)
+        fase_datos.assert_called_once()
+        iniciar_driver.assert_not_called()
 
     def test_sin_configuracion_mantiene_el_modo_local(self):
         with patch.dict(os.environ, {}, clear=True), tempfile.TemporaryDirectory() as carpeta:
@@ -537,7 +520,8 @@ class TestClienteVercel(unittest.TestCase):
             robot_ep2.fase_datos(web, [{"fuente": "respaldo local"}], time.time())
 
         filas_guardadas = guardar_csv.call_args.args[0]
-        self.assertEqual(filas_guardadas.iloc[0]["estado"], "REVISAR")
+        self.assertEqual(filas_guardadas.iloc[0]["estado"], "OK")
+        self.assertIn("cuenta no registrada en el maestro", filas_guardadas.iloc[0]["observaciones"])
         self.assertTrue(guardar_csv.call_args.args[1].endswith(".csv"))
 
 

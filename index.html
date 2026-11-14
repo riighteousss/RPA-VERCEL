@@ -118,6 +118,10 @@
             <span class="metric-label">Cuentas involucradas</span>
             <strong id="metric-accounts">0</strong>
           </article>
+          <article class="metric-card">
+            <span class="metric-label">Cuentas fuera del maestro</span>
+            <strong id="metric-unregistered">0</strong>
+          </article>
         </div>
 
         <div class="chart-grid">
@@ -131,6 +135,18 @@
           </article>
         </div>
 
+        <article id="account-observations" class="panel observation-panel" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">OBSERVACIÓN INFORMATIVA</p>
+              <h3>Cuentas no incluidas en el maestro</h3>
+            </div>
+            <span id="account-observations-count" class="review-count"></span>
+          </div>
+          <p id="account-observations-summary" class="section-copy"></p>
+          <ul id="account-observations-list" class="observation-list"></ul>
+        </article>
+
         <article class="panel data-panel">
           <div class="section-heading">
             <div>
@@ -142,6 +158,7 @@
               <select id="movement-filter">
                 <option value="all">Todos</option>
                 <option value="review">Para revisar</option>
+                <option value="observations">Observaciones</option>
                 <option value="ok">Sin alertas</option>
               </select>
             </label>
@@ -173,7 +190,7 @@
             </div>
             <span id="review-count" class="review-count"></span>
           </div>
-          <p class="section-copy">Se señalan las reglas reportadas por el robot y discrepancias identificables en los datos (por ejemplo, duplicados, límites excedidos o signos incompatibles).</p>
+          <p class="section-copy">Se muestran alertas que requieren revisión, como IDs duplicados, límites excedidos o signos incompatibles. Las coincidencias de cuenta, fecha, acción y monto no se consideran duplicados por sí solas.</p>
           <div id="review-empty" class="empty-state" hidden>No se detectaron valores para revisar.</div>
           <div id="review-table-wrap" class="table-wrap">
             <table>

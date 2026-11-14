@@ -13,7 +13,6 @@ Hay que dejarlo en la misma carpeta que testfire_robot.py.
 import os
 import json
 import time
-import glob
 
 import matplotlib
 matplotlib.use("Agg")  # solo guardamos el grafico en un archivo, no abrimos ventana
@@ -21,7 +20,6 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 import pandas as pd
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import (
     NoSuchElementException, WebDriverException, TimeoutException,
     UnexpectedAlertPresentException, NoAlertPresentException,
@@ -51,7 +49,6 @@ MAESTRO = os.path.join(BASE_DIR, "maestro_cuentas.xlsx")
 
 CANTIDAD_BENEFICIARIOS = 5
 ENVIAR_FEEDBACK = False   # solo se llena el formulario, no se envia (el sitio es compartido)
-URL_PANEL_VERCEL = "https://ev2-vercel-alertas-w6rvhvb5v-righteous-space.vercel.app/"
 
 ALERTAS = []   # alerts de JavaScript que abrio el sitio (se anotan para el informe)
 
@@ -320,7 +317,7 @@ def fase_datos(web, beneficiarios, t0):
 
     df_despues = df[["id_transaccion", "fecha", "cuenta_id", "accion", "monto_num", "titular",
                      "tipo_cuenta", "estado_cuenta", "limite_monto", "en_maestro",
-                     "errores_negocio", "sugerencia", "estado"]]
+                     "errores_negocio", "observaciones", "sugerencia", "estado"]]
     discrepancias = df_despues[df_despues["estado"] == "REVISAR"]
     cuentas_fuera = (df[~df["en_maestro"]].groupby("cuenta_id").size()
                      .reset_index(name="movimientos"))
@@ -338,6 +335,7 @@ def fase_datos(web, beneficiarios, t0):
         "para_revisar": int((df["estado"] == "REVISAR").sum()),
         "cuentas_distintas": int(df["cuenta_id"].nunique()),
         "cuentas_fuera_del_maestro": len(cuentas_fuera),
+        "movimientos_fuera_del_maestro": int((~df["en_maestro"]).sum()),
         "reglas_disparadas": conteo,
         "ms_extraccion_selenium": tec["ms_selenium"],
         "ms_extraccion_dom": tec["ms_dom"],
@@ -403,63 +401,6 @@ def fase_datos(web, beneficiarios, t0):
     return resumen
 
 
-def mostrar_informes_en_panel(rutas_csv):
-    """Abre el panel, carga todos los CSV locales y lo deja visible para revisar."""
-    if not rutas_csv:
-        logger.warning("No hay informes CSV para cargar en el panel")
-        return
-
-    url = os.environ.get("VERCEL_DASHBOARD_URL", URL_PANEL_VERCEL).strip()
-    if not url.startswith("https://"):
-        raise ValueError("VERCEL_DASHBOARD_URL debe usar HTTPS")
-    for ruta in rutas_csv:
-        if os.path.getsize(ruta) > 5 * 1024 * 1024:
-            raise ValueError(f"El archivo supera el límite de 5 MB del panel: {ruta}")
-
-    driver = iniciar_driver()
-    try:
-        driver.get(url)
-        try:
-            selector_archivos = WebDriverWait(driver, 12).until(
-                lambda navegador: navegador.find_element(By.ID, "report-file")
-            )
-        except TimeoutException:
-            if "github.com/login" not in driver.current_url:
-                raise RuntimeError(
-                    "No se encontró el cargador de informes. Revisa la URL y el despliegue de Vercel."
-                )
-            input(
-                "Vercel solicita iniciar sesión en GitHub. Completa el acceso en Chrome "
-                "y presiona Enter aquí para continuar..."
-            )
-            selector_archivos = WebDriverWait(driver, 120).until(
-                lambda navegador: navegador.find_element(By.ID, "report-file")
-            )
-
-        driver.execute_script(
-            "arguments[0].style.position='static';"
-            "arguments[0].style.width='auto';"
-            "arguments[0].style.height='auto';"
-            "arguments[0].style.clip='auto';"
-            "arguments[0].style.clipPath='none';",
-            selector_archivos,
-        )
-        selector_archivos.send_keys("\n".join(os.path.abspath(ruta) for ruta in rutas_csv))
-        WebDriverWait(driver, 90).until(
-            lambda navegador: navegador.find_element(
-                By.ID, "dashboard"
-            ).get_attribute("hidden") is None
-        )
-        logger.info(
-            f"Panel actualizado con {len(rutas_csv)} informe(s): {driver.current_url}"
-        )
-        input("Los informes ya están visibles en el panel. Presiona Enter para cerrar Chrome...")
-    except Exception:
-        driver.quit()
-        raise
-    driver.quit()
-
-
 # ---------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------
@@ -475,14 +416,9 @@ def main():
         return
 
     try:
-        resumen = fase_datos(web, beneficiarios, t0)
-        if resumen is not None:
-            rutas_csv = sorted(glob.glob(os.path.join(
-                OUTPUT_DIR, "Reporte_Alerta_Vercel_*.csv"
-            )))
-            mostrar_informes_en_panel(rutas_csv)
+        fase_datos(web, beneficiarios, t0)
     except Exception:
-        logger.exception("Error procesando los datos o cargando el panel de Vercel")
+        logger.exception("Error procesando los datos del robot")
 
 
 if __name__ == "__main__":
