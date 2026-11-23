@@ -9,6 +9,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import socket
 import sqlite3
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -24,6 +25,7 @@ from reglas_negocio import aplicar_reglas
 BASE = Path(__file__).resolve().parent
 OUT = BASE / "output"
 API = "https://randomuser.me/api/1.4/?results=3&seed=rpa-ep3&inc=nat,location"
+PANEL_URL = "https://ev2-vercel-alertas.vercel.app/"
 LOG = logging.getLogger("ep3")
 REVIEW_COLUMNS = ["id_transaccion", "fecha", "accion", "monto_num", "errores_negocio", "estado"]
 
@@ -116,6 +118,53 @@ def preparar_excel(movimientos, referencias, ruta):
     return revisar, adjunto, reporte
 
 
+def cargar_panel(csv):
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    csv = csv.resolve(strict=True)
+    perfil = OUT / "chrome_panel"
+    opciones = webdriver.ChromeOptions()
+    reutilizar = False
+    try:
+        puerto = int((perfil / "DevToolsActivePort").read_text().splitlines()[0])
+        with socket.create_connection(("127.0.0.1", puerto), timeout=0.5):
+            reutilizar = True
+        opciones.debugger_address = f"127.0.0.1:{puerto}"
+    except (OSError, ValueError, IndexError):
+        pass
+    if not reutilizar:
+        opciones.add_argument(f"--user-data-dir={perfil}")
+        opciones.add_experimental_option("detach", True)
+    driver = webdriver.Chrome(options=opciones)
+    try:
+        driver.set_page_load_timeout(30)
+        if reutilizar and driver.current_url != PANEL_URL:
+            driver.switch_to.new_window("tab")
+        driver.get(PANEL_URL)
+        espera = WebDriverWait(driver, 20)
+        archivo = espera.until(lambda pagina: pagina.find_element(By.ID, "report-file"))
+        estado = driver.find_element(By.ID, "file-status")
+        archivo.send_keys(str(csv))
+        resultado = espera.until(lambda _: estado.get_attribute("data-report-state"))
+        if resultado == "error":
+            raise RuntimeError(f"El panel rechazó el CSV: {estado.text}")
+        if resultado != "guardado" or not driver.find_element(By.ID, "dashboard").is_displayed():
+            raise RuntimeError("El panel no confirmó que el informe quedó guardado")
+        driver.save_screenshot(str(csv.parent / "panel_vercel.png"))
+        LOG.info("PANEL | %s analizado y guardado en Chrome", csv.name)
+    except Exception:
+        if reutilizar:
+            driver.service.stop()
+        else:
+            driver.quit()
+        raise
+    else:
+        # La ventana queda abierta para la revisión, aunque el robot termine.
+        driver.service.stop()
+
+
 def notificar(revisar, adjunto):
     if revisar.empty:
         LOG.info("OUTLOOK omitido | 0 excepciones")
@@ -166,9 +215,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demo", action="store_true", help="Usa movimientos sintéticos")
     parser.add_argument("--sin-api", action="store_true", help="Omite la API en una prueba demo sin red")
+    parser.add_argument("--sin-panel", action="store_true", help="Genera los informes sin abrir Vercel")
+    parser.add_argument("--solo-panel", type=Path, metavar="CSV", help="Abre Vercel con un reporte ya generado")
     parser.add_argument("--enviar", action="store_true", help="Envía correo cuando hay excepciones")
     parser.add_argument("--abrir-excel", action="store_true", help="Abre el reporte en Excel o la aplicación asociada de Windows")
     args = parser.parse_args()
+    if args.solo_panel:
+        if args.demo or args.sin_api or args.sin_panel or args.enviar or args.abrir_excel:
+            parser.error("--solo-panel se usa sin otras opciones")
+        logging.basicConfig(level=logging.INFO)
+        try:
+            cargar_panel(args.solo_panel)
+            return 0
+        except Exception:
+            LOG.exception("No se pudo abrir el informe en Vercel")
+            return 1
     if (args.sin_api and not args.demo) or (args.demo and args.enviar):
         parser.error("--sin-api requiere --demo. --demo y --enviar son incompatibles.")
     ruta = OUT / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid4().hex[:8])
@@ -183,6 +244,8 @@ def main():
             LOG.info("API omitida por opción de prueba sin red")
         referencias = [] if args.sin_api else referencia_publica(ruta)
         revisar, adjunto, reporte = preparar_excel(movimientos, referencias, ruta)
+        if not args.sin_panel:
+            cargar_panel(ruta / "panel_EP3.csv")
         if args.abrir_excel:
             os.startfile(reporte)
             LOG.info("Se solicitó abrir %s en la aplicación de escritorio", reporte.name)

@@ -9,7 +9,7 @@ Con Python 3.12 o superior y Chrome instalados, desde PowerShell:
 ```powershell
 py -3.12 -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install -r requirements-robot.txt
-& .\.venv\Scripts\python.exe .\robot_ep3.py --demo --sin-api
+& .\.venv\Scripts\python.exe .\robot_ep3.py --demo --sin-api --sin-panel
 & .\.venv\Scripts\python.exe .\test_ep3.py
 & .\.venv\Scripts\python.exe .\robot_ep3.py --abrir-excel
 ```
@@ -18,6 +18,14 @@ py -3.12 -m venv .venv
 - La ejecución normal inicia sesión en la cuenta pública de demostración de TestFire. Usa únicamente datos del caso de laboratorio. ChromeDriver se administra con Selenium Manager.
 - Cada ejecución crea una carpeta en `output/` con log, Excel, CSV para el panel, referencia JSON cuando está disponible y capturas de TestFire cuando se ejecuta el login. El contenido de `output/` es local y está excluido de Git.
 - El Excel completo contiene `Antes`, `Despues`, `Referencia_API`, `Excepciones` y `Rechazados`. `Revision_EP3.xlsx` solo contiene las columnas necesarias para decidir qué revisar. Carga `panel_EP3.csv` en el panel para ver las excepciones y motivos.
+
+## Revisar en Vercel y elegir destinatarios
+
+Al ejecutar `python robot_ep3.py`, el robot genera los reportes, abre el panel de Vercel en Chrome y carga `panel_EP3.csv`. El panel calcula los indicadores, gráficos y excepciones. El CSV reúne todos los movimientos válidos, por lo que alcanza para alimentar tanto el resumen como la lista de revisión.
+
+Revisa los datos en la ventana que abre el robot. En la sección de seguimiento escribe los destinatarios y pulsa **Abrir borrador de correo**. Outlook o la aplicación de correo predeterminada abre el borrador para que confirmes el envío. Si necesitas adjuntar el Excel, elige `Revision_EP3.xlsx` de esa ejecución. Usa el flujo normal sin `--enviar` para elegir los destinatarios después de revisar.
+
+El panel conserva el último CSV en el perfil de Chrome del robot. Puedes recargar la página en esa ventana o borrar el informe mediante el botón del panel. Para reabrirlo con un CSV existente, ejecuta `python robot_ep3.py --solo-panel "output/<ejecución>/panel_EP3.csv"`. El informe permanece en ese perfil de este equipo. `--sin-panel` permite generar los archivos sin abrir Vercel.
 
 ## Habilitar Outlook desde Vercel
 

@@ -49,6 +49,8 @@ const fileInput = document.querySelector("#report-file");
 const dropZone = document.querySelector("#drop-zone");
 const fileStatus = document.querySelector("#file-status");
 const apiSettings = document.querySelector("#api-settings");
+const savedReportKey = "ep3:last-report";
+const forgetReport = document.querySelector("#forget-report");
 let analyzedMovements = [];
 
 document.querySelector("#load-example").addEventListener("click", () => {
@@ -90,6 +92,15 @@ dropZone.addEventListener("drop", (event) => {
 
 movementFilter.addEventListener("change", renderMovementTable);
 emailForm.addEventListener("submit", preparePartnerEmail);
+forgetReport.addEventListener("click", () => {
+  try {
+    localStorage.removeItem(savedReportKey);
+    window.location.reload();
+  } catch {
+    setFileStatus("No se pudo borrar el informe guardado en este navegador.", true);
+  }
+});
+restoreReport();
 
 function setFileStatus(message, isError = false) {
   fileStatus.textContent = message;
@@ -97,6 +108,7 @@ function setFileStatus(message, isError = false) {
 }
 
 async function loadReportFile(file) {
+  fileStatus.dataset.reportState = "";
   try {
     if (file.size > 5 * 1024 * 1024) {
       throw new Error("El archivo supera el límite de 5 MB.");
@@ -113,15 +125,42 @@ async function loadReportFile(file) {
       throw new Error("Elige un archivo con extensión .csv o .json.");
     }
 
-    payloadInput.value = JSON.stringify({ movimientos: movements }, null, 2);
-    setFileStatus(`${file.name} · ${formatNumber(movements.length)} movimientos listos para analizar.`);
-    showResult("Informe cargado.", "El archivo permanece en este navegador hasta que decidas analizarlo o enviarlo a Vercel.", false);
+    const date = new Date().toISOString();
+    renderReport(file.name, movements, date);
+    try {
+      localStorage.setItem(savedReportKey, JSON.stringify({ name: file.name, text, extension, date }));
+      forgetReport.hidden = false;
+      fileStatus.dataset.reportState = "guardado";
+    } catch {
+      setFileStatus("Informe analizado. El navegador no pudo guardar esta carga para la próxima visita.", true);
+      fileStatus.dataset.reportState = "sin-guardar";
+    }
+    dashboard.scrollIntoView({ behavior: "instant", block: "start" });
     fileInput.value = "";
   } catch (error) {
     setFileStatus(error instanceof Error ? error.message : "No se pudo leer el archivo.", true);
     showResult("No se pudo cargar el informe.", error instanceof Error ? error.message : "Revisa el archivo e inténtalo de nuevo.", true);
-    payloadInput.value = "";
+    fileStatus.dataset.reportState = "error";
     fileInput.value = "";
+  }
+}
+
+function renderReport(name, movements, date) {
+  payloadInput.value = JSON.stringify({ movimientos: movements }, null, 2);
+  showDashboard(movements);
+  setFileStatus(`${name} · ${formatNumber(movements.length)} movimientos · ${new Date(date).toLocaleString("es-CL")}`);
+  showResult("Informe listo para revisar.", "El panel procesó el archivo en este navegador.", false);
+}
+
+function restoreReport() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(savedReportKey));
+    if (!saved) return;
+    const movements = saved.extension === "csv" ? parseCsvMovements(saved.text) : parseMovements(saved.text);
+    renderReport(saved.name, movements, saved.date);
+    forgetReport.hidden = false;
+  } catch {
+    setFileStatus("No se pudo recuperar el último informe. Carga un CSV o vuelve a ejecutar el robot.", true);
   }
 }
 
@@ -451,7 +490,7 @@ function preparePartnerEmail(event) {
   const flagged = analyzedMovements.filter((item) => item.flagged);
   const shortValue = (value) => String(value ?? "—").replace(/[\r\n]+/g, " ").slice(0, 80);
   const detailLines = flagged.slice(0, 15).map(({ movement, issues }) =>
-    `- ID ${shortValue(movement.id_transaccion)} | cuenta ${shortValue(movement.cuenta_id)} | monto ${shortValue(movement.monto_num)} | ${shortValue(issues.join("; "))}`
+    `- ID ${shortValue(movement.id_transaccion)} | monto ${shortValue(movement.monto_num)} | ${shortValue(issues.join("; "))}`
   );
   const omittedCount = flagged.length - detailLines.length;
   if (omittedCount > 0) {

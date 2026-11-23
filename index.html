@@ -52,6 +52,7 @@
             <input id="report-file" type="file" accept=".csv,.json,text/csv,application/json">
           </label>
           <p id="file-status" class="file-status" role="status" aria-live="polite">También puedes <button class="text-button" id="load-example" type="button">cargar datos de demostración</button> para explorar el panel.</p>
+          <button class="text-button" id="forget-report" type="button" hidden>Borrar informe guardado en este navegador</button>
 
           <details class="payload-details">
             <summary>Ver o editar los datos del informe (JSON)</summary>
@@ -185,11 +186,11 @@
             </table>
           </div>
           <form id="partner-email-form" class="partner-form">
-            <label for="partner-emails">Correo(s) de los socios</label>
+            <label for="partner-emails">Destinatarios de la revisión</label>
             <input id="partner-emails" name="partner-emails" type="text" placeholder="socio@empresa.com, otro@empresa.com" autocomplete="email">
             <label for="follow-up-note">Solicitud de revisión o seguimiento</label>
             <textarea id="follow-up-note" name="follow-up-note" rows="3" placeholder="Por favor, revisen estos movimientos y confirmen los próximos pasos."></textarea>
-            <button class="secondary-button email-button" type="submit">Preparar correo a socios</button>
+            <button class="secondary-button email-button" type="submit">Abrir borrador de correo</button>
             <p class="hint email-hint">Abre tu aplicación de correo con un borrador; no envía el mensaje automáticamente. No se transmiten los datos hasta que tú lo envíes.</p>
             <p id="email-result" class="email-result" role="status" aria-live="polite"></p>
           </form>
