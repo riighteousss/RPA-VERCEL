@@ -1,0 +1,3 @@
+Excel de demostración: 4 de entrada, 3 válidos, 2 excepciones, 1 rechazado
+Outlook simulado: 0 casos omitidos, HTTP 202 simulado, segundo envío bloqueado
+Graph simulado: OAuth, destinatario fijo y adjunto XLSX comprobados

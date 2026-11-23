@@ -1,3 +1,42 @@
+# EP3 · Robot de revisión de movimientos
+
+El robot ejecuta Selenium en Windows para leer movimientos del sitio de demostración TestFire. Consulta RandomUser como referencia externa, cruza los movimientos con el maestro de cuentas y abre o valida el reporte Excel. Con el envío habilitado, Vercel entrega a Outlook un Excel que contiene solo las excepciones. El panel de Vercel analiza el CSV en el navegador.
+
+## Ejecutar
+
+Con Python 3.12 o superior y Chrome instalados, desde PowerShell:
+
+```powershell
+py -3.12 -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install -r requirements-robot.txt
+& .\.venv\Scripts\python.exe .\robot_ep3.py --demo --sin-api
+& .\.venv\Scripts\python.exe .\test_ep3.py
+& .\.venv\Scripts\python.exe .\robot_ep3.py --abrir-excel
+```
+
+- `--demo` usa cuatro movimientos sintéticos y consulta RandomUser. Añade `--sin-api` para una prueba sin red.
+- La ejecución normal inicia sesión en la cuenta pública de demostración de TestFire. Usa únicamente datos del caso de laboratorio. ChromeDriver se administra con Selenium Manager.
+- Cada ejecución crea una carpeta en `output/` con log, Excel, CSV para el panel, referencia JSON cuando está disponible y capturas de TestFire cuando se ejecuta el login. El contenido de `output/` es local y está excluido de Git.
+- El Excel completo contiene `Antes`, `Despues`, `Referencia_API`, `Excepciones` y `Rechazados`. `Revision_EP3.xlsx` solo contiene las columnas necesarias para decidir qué revisar. Carga `panel_EP3.csv` en el panel para ver las excepciones y motivos.
+
+## Habilitar Outlook desde Vercel
+
+1. En Microsoft Entra registra una aplicación de un solo tenant. Usa un buzón de Exchange Online autorizado. Pide al administrador que asigne `Application Mail.Send` con alcance al buzón emisor usando RBAC de Exchange Online. Los permisos son aditivos. Evita conceder a la aplicación un permiso global de envío si usas un alcance de buzón en Exchange.
+2. En el proyecto Vercel conectado a este repositorio, con raíz `./`, configura `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_MAILBOX` y `GRAPH_REVIEW_TO`. El último es el buzón autorizado del responsable de revisión. Añade `ALERT_API_SECRET` con al menos 32 caracteres aleatorios y vuelve a desplegar.
+3. Configura en el equipo del robot `VERCEL_OUTLOOK_URL` con la URL HTTPS del proyecto terminada en `/api/outlook` y `VERCEL_ALERT_SECRET` con el mismo secreto de Vercel. Guarda los valores fuera del repositorio. Ejecuta `python robot_ep3.py --enviar --abrir-excel` desde el entorno virtual.
+4. Comprueba el `202` y `request_id` en el log. El `202` es un acuse de aceptación de Microsoft. Verifica Enviados o la recepción y abre el adjunto antes de registrar el envío como evidencia.
+
+La primera ejecución con excepciones reserva una huella en `output/alertas_ep3.sqlite`. Si Graph acepta, se guarda `aceptado`. Si falla o hay incertidumbre, queda `pendiente` y el robot bloquea el envío repetido. Para recuperar una ejecución pendiente, verifica primero los elementos enviados o el seguimiento de mensajes con el administrador. Si compruebas que el correo no se aceptó, corrige la causa y libera únicamente el registro pendiente con `DELETE FROM alertas WHERE huella = ? AND estado = 'pendiente'`, usando la huella que muestra el robot. Conserva esta base entre ejecuciones.
+
+- [Microsoft Graph sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0)
+- [RBAC de aplicaciones en Exchange Online](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac)
+- [RandomUser](https://randomuser.me/documentation)
+
+## Evaluación
+
+El informe, la presentación y las evidencias compartibles están en [entrega](entrega). El flujo anterior de EV2 por Resend sigue disponible en `/api/alerta` y conserva su configuración.
+
+
 # EV2: robot local y alertas en Vercel
 
 El robot Selenium sigue ejecutandose en el PC del usuario. Desplegar esta carpeta

@@ -168,7 +168,7 @@ function parseCsvMovements(value) {
   const requiredHeaders = ["id_transaccion", "fecha", "cuenta_id", "monto_num", "estado"];
   const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
   if (missingHeaders.length) {
-    throw new Error(`No reconozco este CSV del robot EV2: faltan ${missingHeaders.join(", ")}.`);
+    throw new Error(`No reconozco este CSV del robot: faltan ${missingHeaders.join(", ")}.`);
   }
 
   return rows.slice(1).map((cells, index) => {
@@ -463,12 +463,12 @@ function preparePartnerEmail(event) {
     "",
     note || "Solicito revisar los movimientos señalados y confirmar los próximos pasos.",
     "",
-    `Resumen EV2: ${flagged.length} de ${analyzedMovements.length} movimiento(s) requieren revisión.`,
+    `Resumen EP3: ${flagged.length} de ${analyzedMovements.length} movimiento(s) requieren revisión.`,
     ...(detailLines.length ? ["", ...detailLines] : ["", "No hay hallazgos detectados; solicito confirmar si hace falta algún seguimiento."]),
     "",
-    "Este borrador fue preparado desde el panel EV2."
+    "Este borrador fue preparado desde el panel EP3."
   ].join("\n");
-  const subject = `Solicitud de revisión/seguimiento EV2 (${flagged.length} hallazgo(s))`;
+  const subject = `Solicitud de revisión/seguimiento EP3 (${flagged.length} hallazgo(s))`;
   const mailto = `mailto:${recipients.map(encodeURIComponent).join(",")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   status.classList.remove("email-error");
   status.textContent = "Se solicitará a tu aplicación de correo que abra un borrador; el mensaje no se envía automáticamente.";

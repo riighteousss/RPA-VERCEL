@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "nat": "ES",
+      "location": {
+        "country": "Spain"
+      }
+    },
+    {
+      "nat": "NZ",
+      "location": {
+        "country": "New Zealand"
+      }
+    },
+    {
+      "nat": "GB",
+      "location": {
+        "country": "United Kingdom"
+      }
+    }
+  ]
+}

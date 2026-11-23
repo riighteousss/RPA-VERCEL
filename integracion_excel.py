@@ -72,9 +72,13 @@ def guardar_excel(hojas, ruta):
 
         for hoja in writer.book.worksheets:
             hoja.freeze_panes = "A2"
+            hoja.auto_filter.ref = hoja.dimensions
             for celda in hoja[1]:
                 celda.font = Font(bold=True)
             for col in hoja.columns:
+                for celda in col[1:]:
+                    if celda.data_type == "f":
+                        celda.data_type = "s"
                 ancho = max(len(str(c.value)) if c.value is not None else 0 for c in col)
                 hoja.column_dimensions[col[0].column_letter].width = min(ancho + 2, 60)
                 if str(col[0].value).startswith("monto"):

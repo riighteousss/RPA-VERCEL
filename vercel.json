@@ -2,6 +2,9 @@
   "functions": {
     "api/alerta.py": {
       "maxDuration": 30
+    },
+    "api/outlook.py": {
+      "maxDuration": 30
     }
   }
 }

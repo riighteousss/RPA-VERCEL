@@ -1,0 +1,78 @@
+"""Chequeo del flujo EP3 sin credenciales ni correo real."""
+import base64
+from contextlib import closing
+import json
+import os
+from pathlib import Path
+import sqlite3
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+from openpyxl import load_workbook
+
+from api import outlook
+import robot_ep3 as ep3
+
+
+class Acuse:
+    status = 202
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return b'{"estado":"aceptado","request_id":"prueba-local"}'
+
+
+with TemporaryDirectory() as destino:
+    ruta = Path(destino)
+    revisar, adjunto, reporte = ep3.preparar_excel(ep3.datos_demo(), [], ruta)
+    assert list(revisar["id_transaccion"]) == ["102", "103"]
+    with closing(load_workbook(reporte, read_only=True)) as libro:
+        assert libro.sheetnames == ["Antes", "Despues", "Referencia_API", "Excepciones", "Rechazados"]
+        assert libro["Rechazados"].max_row == 2
+    print("Excel de demostración: 4 de entrada, 3 válidos, 2 excepciones, 1 rechazado")
+
+    with (
+        patch.object(ep3, "OUT", ruta),
+        patch.dict(os.environ, {"VERCEL_OUTLOOK_URL": "https://example.com/api/outlook", "VERCEL_ALERT_SECRET": "a" * 32}),
+        patch.object(ep3, "urlopen", return_value=Acuse()) as enviar,
+    ):
+        ep3.notificar(revisar.iloc[:0], adjunto)
+        ep3.notificar(revisar, adjunto)
+        ep3.notificar(revisar.iloc[::-1], adjunto)
+        assert enviar.call_count == 1
+        solicitud = enviar.call_args.args[0]
+        payload = json.loads(solicitud.data)
+        assert payload["cantidad"] == 2
+        assert base64.b64decode(payload["xlsx"]) == adjunto.read_bytes()
+        with closing(sqlite3.connect(ruta / "alertas_ep3.sqlite")) as db:
+            assert db.execute("SELECT estado FROM alertas").fetchall() == [("aceptado",)]
+    print("Outlook simulado: 0 casos omitidos, HTTP 202 simulado, segundo envío bloqueado")
+
+    entorno_graph = {
+        "GRAPH_TENANT_ID": "01234567-89ab-cdef-0123-456789abcdef",
+        "GRAPH_CLIENT_ID": "prueba",
+        "GRAPH_CLIENT_SECRET": "prueba",
+        "GRAPH_MAILBOX": "robot@example.com",
+        "GRAPH_REVIEW_TO": "revision@example.com",
+    }
+    with (
+        patch.dict(os.environ, entorno_graph),
+        patch.object(outlook, "urlopen") as servicio,
+    ):
+        token = servicio.return_value.__enter__.return_value
+        token.read.return_value = b'{"access_token":"token-de-prueba"}'
+        token.status = 202
+        token.headers = {"request-id": "graph-simulado"}
+        assert outlook.enviar_graph(payload["xlsx"], 2) == "graph-simulado"
+        autenticacion, correo = [llamada.args[0] for llamada in servicio.call_args_list]
+        assert autenticacion.full_url.startswith("https://login.microsoftonline.com/")
+        assert correo.full_url == "https://graph.microsoft.com/v1.0/users/robot%40example.com/sendMail"
+        mensaje = json.loads(correo.data)["message"]
+        assert mensaje["toRecipients"] == [{"emailAddress": {"address": "revision@example.com"}}]
+        assert mensaje["attachments"][0]["contentBytes"] == payload["xlsx"]
+    print("Graph simulado: OAuth, destinatario fijo y adjunto XLSX comprobados")

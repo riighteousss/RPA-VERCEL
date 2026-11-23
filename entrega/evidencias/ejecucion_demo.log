@@ -1,0 +1,4 @@
+2026-11-22 22:46:54,232 INFO LOGIN omitido | movimientos sintéticos de demostración
+2026-11-22 22:46:54,590 INFO API HTTP 200 | referencias=3
+2026-11-22 22:46:54,666 INFO EXCEL abierto y verificado | antes=4 | válidos=3 | revisar=2 | rechazados=1
+2026-11-22 22:46:54,755 INFO OUTLOOK omitido | ejecución sin envío
