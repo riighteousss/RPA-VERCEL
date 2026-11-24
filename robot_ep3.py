@@ -167,7 +167,7 @@ def cargar_panel(csv):
 
 def notificar(revisar, adjunto):
     if revisar.empty:
-        LOG.info("OUTLOOK omitido | 0 excepciones")
+        LOG.info("CORREO omitido | 0 excepciones")
         return
     url = os.environ.get("VERCEL_OUTLOOK_URL", "").strip()
     secret = os.environ.get("VERCEL_ALERT_SECRET", "").strip()
@@ -188,7 +188,7 @@ def notificar(revisar, adjunto):
             estado, = db.execute("SELECT estado FROM alertas WHERE huella=?", (huella,)).fetchone()
             LOG.info("MEJORA | alerta duplicada omitida | estado anterior=%s", estado)
             if estado == "pendiente":
-                raise RuntimeError(f"Estado de envío sin confirmar. Revisar en Outlook antes de liberar {huella}")
+                raise RuntimeError(f"Estado de envío sin confirmar. Revisar el buzón emisor antes de liberar {huella}")
             return
         db.commit()
         solicitud = Request(url, cuerpo, {
@@ -199,7 +199,7 @@ def notificar(revisar, adjunto):
             if respuesta.status != 202 or acuse.get("estado") != "aceptado":
                 raise RuntimeError("No se confirmó aceptación del correo")
         db.execute("UPDATE alertas SET estado='aceptado' WHERE huella=?", (huella,))
-        LOG.info("OUTLOOK aceptado HTTP 202 | request_id=%s", acuse.get("request_id"))
+        LOG.info("CORREO aceptado HTTP 202 | request_id=%s", acuse.get("request_id"))
 
 
 def datos_demo():
@@ -252,7 +252,7 @@ def main():
         if args.enviar:
             notificar(revisar, adjunto)
         else:
-            LOG.info("OUTLOOK omitido | ejecución sin envío")
+            LOG.info("CORREO omitido | ejecución sin envío")
         LOG.info("FIN | %s", ruta)
         return 0
     except Exception:

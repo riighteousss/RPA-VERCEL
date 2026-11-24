@@ -76,3 +76,19 @@ with TemporaryDirectory() as destino:
         assert mensaje["toRecipients"] == [{"emailAddress": {"address": "revision@example.com"}}]
         assert mensaje["attachments"][0]["contentBytes"] == payload["xlsx"]
     print("Graph simulado: OAuth, destinatario fijo y adjunto XLSX comprobados")
+
+    with (
+        patch.dict(os.environ, {"GMAIL_REVIEW_TO": "revision@example.com", "GMAIL_APP_PASSWORD": "abcd efgh ijkl mnop"}),
+        patch.object(outlook.smtplib, "SMTP_SSL") as smtp_ssl,
+    ):
+        outlook.enviar_gmail(adjunto.read_bytes(), 2, "robot@gmail.com")
+        smtp = smtp_ssl.return_value.__enter__.return_value
+        assert smtp_ssl.call_args.args == ("smtp.gmail.com", 465)
+        smtp.login.assert_called_once_with("robot@gmail.com", "abcdefghijklmnop")
+        smtp.send_message.assert_called_once()
+        mensaje = smtp.send_message.call_args.args[0]
+        assert smtp.send_message.call_args.kwargs["to_addrs"] == ["revision@example.com"]
+        archivo, = mensaje.iter_attachments()
+        assert archivo.get_filename() == "Revision_EP3.xlsx"
+        assert archivo.get_payload(decode=True) == adjunto.read_bytes()
+    print("Gmail simulado: autenticación, destinatario y adjunto XLSX comprobados")

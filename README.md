@@ -27,6 +27,12 @@ Revisa los datos en la ventana que abre el robot. En la sección de seguimiento 
 
 El panel conserva el último CSV en el perfil de Chrome del robot. Puedes recargar la página en esa ventana o borrar el informe mediante el botón del panel. Para reabrirlo con un CSV existente, ejecuta `python robot_ep3.py --solo-panel "output/<ejecución>/panel_EP3.csv"`. El informe permanece en ese perfil de este equipo. `--sin-panel` permite generar los archivos sin abrir Vercel.
 
+## Habilitar Gmail desde Vercel
+
+En Settings → Environment Variables, configura `GMAIL_FROM` con el correo Gmail emisor, `GMAIL_REVIEW_TO` con el destinatario y `GMAIL_APP_PASSWORD` con una contraseña de aplicación de Google. El emisor requiere [verificación en dos pasos y una contraseña de aplicación](https://support.google.com/accounts/answer/185833?hl=es). Guarda la contraseña como variable sensible y vuelve a desplegar el proyecto.
+
+Mantén `ALERT_API_SECRET` en Vercel y usa el mismo valor como `VERCEL_ALERT_SECRET` en Windows. `VERCEL_OUTLOOK_URL` sigue apuntando a `/api/outlook`. Ejecuta el robot con `--enviar` para enviar `Revision_EP3.xlsx` si hay excepciones. Revisa el correo en Gmail para confirmar la entrega.
+
 ## Habilitar Outlook desde Vercel
 
 1. En Microsoft Entra registra una aplicación de un solo tenant. Usa un buzón de Exchange Online autorizado. Pide al administrador que asigne `Application Mail.Send` con alcance al buzón emisor usando RBAC de Exchange Online. Los permisos son aditivos. Evita conceder a la aplicación un permiso global de envío si usas un alcance de buzón en Exchange.

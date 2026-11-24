@@ -5,6 +5,9 @@ import json
 import os
 import re
 import secrets
+import smtplib
+import ssl
+from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
@@ -14,6 +17,8 @@ from api.alerta import _json_respuesta
 
 MAX_BODY = 900_000
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+CUERPO = ("Revisa el motivo indicado para cada fila del Excel adjunto. "
+          "El robot marca excepciones para revisión humana.")
 
 
 def enviar_graph(adj, cantidad):
@@ -46,8 +51,7 @@ def enviar_graph(adj, cantidad):
         "subject": f"[EP3] {cantidad} movimiento(s) requieren revisión",
         "body": {
             "contentType": "Text",
-            "content": "Revisa el motivo indicado para cada fila del Excel adjunto. "
-                       "El robot marca excepciones para revisión humana.",
+            "content": CUERPO,
         },
         "toRecipients": [{"emailAddress": {"address": recipient}}],
         "attachments": [{
@@ -64,6 +68,27 @@ def enviar_graph(adj, cantidad):
         if response.status != 202:
             raise OSError(f"Graph devolvió HTTP {response.status}")
         return response.headers.get("request-id")
+
+
+def enviar_gmail(adj, cantidad, sender):
+    recipient = os.environ.get("GMAIL_REVIEW_TO", "").strip()
+    password = "".join(os.environ.get("GMAIL_APP_PASSWORD", "").split())
+    if not password or not all(
+        re.fullmatch(r"[^\s@,;<>]+@[^\s@,;<>]+", address) for address in (sender, recipient)
+    ):
+        raise ValueError("Configuración SMTP de Gmail incompleta o inválida")
+
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = recipient
+    message["Subject"] = f"[EP3] {cantidad} movimiento(s) requieren revisión"
+    message.set_content(CUERPO)
+    maintype, subtype = XLSX_TYPE.split("/")
+    message.add_attachment(adj, maintype=maintype, subtype=subtype, filename="Revision_EP3.xlsx")
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=8, context=ssl.create_default_context()) as smtp:
+        smtp.login(sender, password)
+        smtp.send_message(message, from_addr=sender, to_addrs=[recipient])
 
 
 class handler(BaseHTTPRequestHandler):
@@ -86,14 +111,20 @@ class handler(BaseHTTPRequestHandler):
             count, attachment = payload["cantidad"], payload["xlsx"]
             if type(count) is not int or not 1 <= count <= 5000:
                 raise ValueError("Cantidad inválida")
-            if not base64.b64decode(attachment, validate=True).startswith(b"PK\x03\x04"):
+            workbook = base64.b64decode(attachment, validate=True)
+            if not workbook.startswith(b"PK\x03\x04"):
                 raise ValueError("Adjunto inválido")
         except (ValueError, KeyError, TypeError, binascii.Error):
             _json_respuesta(self, 400, {"error": "Se requiere un Excel y entre 1 y 5000 excepciones"})
             return
 
         try:
-            request_id = enviar_graph(attachment, count)
+            gmail_sender = os.environ.get("GMAIL_FROM", "").strip()
+            if gmail_sender:
+                enviar_gmail(workbook, count, gmail_sender)
+                request_id = None
+            else:
+                request_id = enviar_graph(attachment, count)
         except HTTPError as error:
             print(f"[outlook] Proveedor HTTP {error.code}", flush=True)
             _json_respuesta(self, 502, {"error": "Microsoft rechazó la solicitud", "http_microsoft": error.code})
