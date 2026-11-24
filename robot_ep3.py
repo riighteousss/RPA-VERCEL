@@ -11,12 +11,14 @@ from pathlib import Path
 import re
 import socket
 import sqlite3
+from time import sleep
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
 import pandas as pd
 from openpyxl import load_workbook
+from selenium.common.exceptions import WebDriverException
 
 from api.alerta import generar_csv
 from integracion_excel import enriquecer_con_maestro, guardar_excel, leer_maestro
@@ -30,12 +32,68 @@ LOG = logging.getLogger("ep3")
 REVIEW_COLUMNS = ["id_transaccion", "fecha", "accion", "monto_num", "errores_negocio", "estado"]
 
 
+class TestFireNoDisponible(RuntimeError):
+    """La fuente sigue sin responder tras los reintentos."""
+
+
+def avisar_telegram(ejecucion, mensaje):
+    token = os.environ.get("EP3_TELEGRAM_TOKEN", "").strip()
+    chat = os.environ.get("EP3_TELEGRAM_CHAT_ID", "").strip()
+    if not token and not chat:
+        return
+    if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token) or not re.fullmatch(r"-?[0-9]+", chat):
+        LOG.warning("TELEGRAM | configuración incompleta o inválida")
+        return
+
+    cuerpo = json.dumps({"chat_id": chat, "text": f"{mensaje}\nEjecución {ejecucion}"}).encode()
+    try:
+        solicitud = Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=cuerpo,
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(solicitud, timeout=8) as respuesta:
+            if json.load(respuesta).get("ok") is not True:
+                raise ValueError("Telegram no confirmó el aviso")
+    except (OSError, ValueError, AttributeError) as error:
+        # La URL de la solicitud contiene el token.
+        LOG.warning("TELEGRAM | no se pudo confirmar el aviso (%s)", type(error).__name__)
+    else:
+        LOG.info("TELEGRAM | aviso aceptado")
+
+
 def leer_testfire(ruta):
+    errores_de_red = (
+        "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_TIMED_OUT",
+        "ERR_TIMED_OUT", "ERR_NAME_NOT_RESOLVED", "ERR_INTERNET_DISCONNECTED",
+        "ERR_ADDRESS_UNREACHABLE", "ERR_NETWORK_CHANGED", "ERR_EMPTY_RESPONSE",
+    )
+    pausas = (2, 5)
+    for intento in range(1, len(pausas) + 2):
+        try:
+            return capturar_movimientos_testfire(ruta)
+        except WebDriverException as error:
+            codigo = next((codigo for codigo in errores_de_red if codigo in (error.msg or "")), None)
+            if codigo is None:
+                raise
+            if intento > len(pausas):
+                raise TestFireNoDisponible(
+                    f"TestFire no respondió después de {intento} intentos ({codigo}). "
+                    "No se generaron reportes nuevos ni se solicitó el correo. "
+                    "Vuelve a ejecutar el robot cuando el sitio esté disponible."
+                ) from error
+            pausa = pausas[intento - 1]
+            LOG.warning("TESTFIRE | intento %s falló (%s) | reintento en %s s", intento, codigo, pausa)
+            sleep(pausa)
+
+
+def capturar_movimientos_testfire(ruta):
     from robot_ep2 import extraer_tabla, filas_a_movimientos
     from testfire_robot import iniciar_driver, login
 
     driver = iniciar_driver()
     try:
+        driver.set_page_load_timeout(20)
         if not login(driver):
             raise RuntimeError("Sesión TestFire no confirmada")
         LOG.info("LOGIN confirmado")
@@ -236,28 +294,45 @@ def main():
     ruta.mkdir(parents=True)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         handlers=[logging.StreamHandler(), logging.FileHandler(ruta / "ejecucion.log", encoding="utf-8")])
+    etapa = "lectura de TestFire"
     try:
         if args.demo:
             LOG.info("LOGIN omitido | movimientos sintéticos de demostración")
         movimientos = datos_demo() if args.demo else leer_testfire(ruta)
         if args.sin_api:
             LOG.info("API omitida por opción de prueba sin red")
+        etapa = "consulta de referencia"
         referencias = [] if args.sin_api else referencia_publica(ruta)
+        etapa = "generación de Excel"
         revisar, adjunto, reporte = preparar_excel(movimientos, referencias, ruta)
+        etapa = "apertura del reporte"
         if not args.sin_panel:
             cargar_panel(ruta / "panel_EP3.csv")
         if args.abrir_excel:
             os.startfile(reporte)
             LOG.info("Se solicitó abrir %s en la aplicación de escritorio", reporte.name)
         if args.enviar:
+            etapa = "envío de correo"
             notificar(revisar, adjunto)
         else:
             LOG.info("CORREO omitido | ejecución sin envío")
+        mensaje = f"✅ EP3 completado. Reporte Excel verificado. {len(revisar)} movimientos para revisión."
+        resultado = 0
         LOG.info("FIN | %s", ruta)
-        return 0
-    except Exception:
+    except TestFireNoDisponible:
+        mensaje = "🔴 TestFire no respondió tras 3 intentos. EP3 se detuvo. Revisa ejecucion.log."
+        resultado = 1
         LOG.exception("EP3 detenido | evidencias en %s", ruta)
-        return 1
+    except Exception:
+        if etapa == "envío de correo":
+            mensaje = "🟡 Reporte Excel verificado. El correo no quedó confirmado. Revisa ejecucion.log."
+        else:
+            mensaje = f"🔴 EP3 se detuvo durante la etapa de {etapa}. Revisa ejecucion.log."
+        resultado = 1
+        LOG.exception("EP3 detenido | evidencias en %s", ruta)
+    if not args.demo:
+        avisar_telegram(ruta.name, mensaje)
+    return resultado
 
 
 if __name__ == "__main__":

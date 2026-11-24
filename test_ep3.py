@@ -92,3 +92,53 @@ with TemporaryDirectory() as destino:
         assert archivo.get_filename() == "Revision_EP3.xlsx"
         assert archivo.get_payload(decode=True) == adjunto.read_bytes()
     print("Gmail simulado: autenticación, destinatario y adjunto XLSX comprobados")
+
+
+with (
+    patch.object(ep3, "capturar_movimientos_testfire") as capturar,
+    patch.object(ep3, "sleep") as pausa,
+):
+    error_red = ep3.WebDriverException("net::ERR_CONNECTION_REFUSED")
+    capturar.side_effect = [error_red, error_red, ep3.datos_demo()]
+    assert ep3.leer_testfire(Path(".")) == ep3.datos_demo()
+    assert capturar.call_count == 3
+    assert [llamada.args[0] for llamada in pausa.call_args_list] == [2, 5]
+
+    capturar.reset_mock()
+    capturar.side_effect = error_red
+    try:
+        ep3.leer_testfire(Path("."))
+    except RuntimeError as error:
+        assert "3 intentos" in str(error)
+    else:
+        raise AssertionError("La caída persistente debe detener el flujo")
+    assert capturar.call_count == 3
+
+    capturar.reset_mock()
+    capturar.side_effect = ep3.WebDriverException("invalid session id")
+    try:
+        ep3.leer_testfire(Path("."))
+    except ep3.WebDriverException:
+        pass
+    else:
+        raise AssertionError("Los errores ajenos a la red deben propagarse")
+    assert capturar.call_count == 1
+print("TestFire simulado: recuperación, caída persistente y error ajeno a la red comprobados")
+
+
+with (
+    patch.dict(os.environ, {"EP3_TELEGRAM_TOKEN": "123:token-prueba", "EP3_TELEGRAM_CHAT_ID": "456"}),
+    patch.object(ep3, "urlopen", return_value=Acuse()) as telegram,
+):
+    telegram.return_value.read = lambda: b'{"ok":true}'
+    ep3.avisar_telegram("ejecucion-prueba", "TestFire no respondió")
+    solicitud = telegram.call_args.args[0]
+    assert solicitud.full_url == "https://api.telegram.org/bot123:token-prueba/sendMessage"
+    assert json.loads(solicitud.data) == {
+        "chat_id": "456", "text": "TestFire no respondió\nEjecución ejecucion-prueba",
+    }
+    telegram.side_effect = OSError("fallo simulado")
+    with patch.object(ep3.LOG, "warning") as warning:
+        ep3.avisar_telegram("ejecucion-prueba", "Aviso")
+        assert "OSError" in warning.call_args.args
+print("Telegram simulado: formato, destinatario y manejo de fallos comprobados")

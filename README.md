@@ -19,6 +19,18 @@ py -3.12 -m venv .venv
 - Cada ejecución crea una carpeta en `output/` con log, Excel, CSV para el panel, referencia JSON cuando está disponible y capturas de TestFire cuando se ejecuta el login. El contenido de `output/` es local y está excluido de Git.
 - El Excel completo contiene `Antes`, `Despues`, `Referencia_API`, `Excepciones` y `Rechazados`. `Revision_EP3.xlsx` solo contiene las columnas necesarias para decidir qué revisar. Carga `panel_EP3.csv` en el panel para ver las excepciones y motivos.
 
+## Cuando TestFire no responde
+
+EP3 reintenta dos veces ante errores de conexión de Chrome, con pausas de 2 y 5 segundos. Si la fuente sigue sin responder, el robot registra el código de red, termina con un código de error y conserva los reportes de ejecuciones previas. En esa ejecución no genera reportes nuevos ni solicita correo. El log queda en `output/<ejecución>/ejecucion.log`.
+
+Puedes consultar un reporte histórico con `--solo-panel` o practicar con `--demo --sin-api --sin-panel`. La demo usa movimientos sintéticos y no permite enviar correos.
+
+## Avisos de ejecución por Telegram
+
+Crea un bot con [@BotFather](https://t.me/BotFather), abre el chat del bot y pulsa Iniciar. Desde PowerShell, ejecuta `& .\configurar_telegram_ep3.ps1` y pega el token cuando lo pida. El asistente obtiene el identificador del chat y guarda `EP3_TELEGRAM_TOKEN` y `EP3_TELEGRAM_CHAT_ID` para tu usuario de Windows. Abre una nueva consola antes de ejecutar EP3.
+
+El robot envía un aviso de estado al terminar una ejecución normal, incluidas las caídas persistentes de TestFire. El mensaje incluye el identificador de ejecución y el total para revisar cuando el proceso termina correctamente. Telegram no recibe el Excel ni los datos de los movimientos. Si el aviso falla, el log lo indica y el código de salida de EP3 se conserva. La demo no envía avisos.
+
 ## Revisar en Vercel y elegir destinatarios
 
 Al ejecutar `python robot_ep3.py`, el robot genera los reportes, abre el panel de Vercel en Chrome y carga `panel_EP3.csv`. El panel calcula los indicadores, gráficos y excepciones. El CSV reúne todos los movimientos válidos, por lo que alcanza para alimentar tanto el resumen como la lista de revisión.
