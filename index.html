@@ -30,7 +30,7 @@
         <ol class="flow" aria-label="Flujo del robot local">
           <li><strong>API pública</strong><small>Referencia de países</small></li>
           <li><strong>Excel</strong><small>Reglas y excepciones</small></li>
-          <li><strong>Outlook</strong><small>Alerta al responsable</small></li>
+          <li><strong>Gmail y Telegram</strong><small>Reporte por correo y aviso de ejecución</small></li>
         </ol>
       </section>
 
@@ -73,7 +73,7 @@
           <div id="api-settings" class="api-settings" hidden>
             <label for="secret">Secreto de la API</label>
             <input id="secret" name="secret" type="password" autocomplete="off" placeholder="ALERT_API_SECRET">
-            <p class="hint">Se usa solo en esta solicitud y no se guarda en el navegador. Esta opción usa el servicio Resend de EV2. El robot EP3 envía su Excel por Outlook.</p>
+            <p class="hint">Se usa solo en esta solicitud y no se guarda en el navegador. Esta opción usa el servicio Resend de EV2. El robot EP3 envía su Excel por Gmail y notifica el estado por Telegram.</p>
             <button class="secondary-button" id="submit-button" type="submit">
               <span id="button-label">Generar CSV y enviar alerta</span>
               <span aria-hidden="true">↗</span>

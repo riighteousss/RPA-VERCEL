@@ -1,6 +1,6 @@
 # EP3 · Robot de revisión de movimientos
 
-El robot ejecuta Selenium en Windows para leer movimientos del sitio de demostración TestFire. Consulta RandomUser como referencia externa, cruza los movimientos con el maestro de cuentas y abre o valida el reporte Excel. Con el envío habilitado, Vercel entrega a Outlook un Excel que contiene solo las excepciones. El panel de Vercel analiza el CSV en el navegador.
+El robot ejecuta Selenium en Windows para leer movimientos del sitio de demostración TestFire. Consulta RandomUser como referencia externa, cruza los movimientos con el maestro de cuentas y abre o valida el reporte Excel. Con el envío habilitado, Vercel envía por Gmail un Excel que contiene solo las excepciones. El panel de Vercel analiza el CSV en el navegador.
 
 ## Ejecutar
 
@@ -35,7 +35,7 @@ El robot envía un aviso de estado al terminar una ejecución normal, incluidas 
 
 Al ejecutar `python robot_ep3.py`, el robot genera los reportes, abre el panel de Vercel en Chrome y carga `panel_EP3.csv`. El panel calcula los indicadores, gráficos y excepciones. El CSV reúne todos los movimientos válidos, por lo que alcanza para alimentar tanto el resumen como la lista de revisión.
 
-Revisa los datos en la ventana que abre el robot. En la sección de seguimiento escribe los destinatarios y pulsa **Abrir borrador de correo**. Outlook o la aplicación de correo predeterminada abre el borrador para que confirmes el envío. Si necesitas adjuntar el Excel, elige `Revision_EP3.xlsx` de esa ejecución. Usa el flujo normal sin `--enviar` para elegir los destinatarios después de revisar.
+Revisa los datos en la ventana que abre el robot. En la sección de seguimiento escribe los destinatarios y pulsa **Abrir borrador de correo**. La aplicación de correo predeterminada abre el borrador para que confirmes el envío. Si necesitas adjuntar el Excel, elige `Revision_EP3.xlsx` de esa ejecución. Usa el flujo normal sin `--enviar` para elegir los destinatarios después de revisar.
 
 El panel conserva el último CSV en el perfil de Chrome del robot. Puedes recargar la página en esa ventana o borrar el informe mediante el botón del panel. Para reabrirlo con un CSV existente, ejecuta `python robot_ep3.py --solo-panel "output/<ejecución>/panel_EP3.csv"`. El informe permanece en ese perfil de este equipo. `--sin-panel` permite generar los archivos sin abrir Vercel.
 
@@ -45,17 +45,8 @@ En Settings → Environment Variables, configura `GMAIL_FROM` con el correo Gmai
 
 Mantén `ALERT_API_SECRET` en Vercel y usa el mismo valor como `VERCEL_ALERT_SECRET` en Windows. `VERCEL_OUTLOOK_URL` sigue apuntando a `/api/outlook`. Ejecuta el robot con `--enviar` para enviar `Revision_EP3.xlsx` si hay excepciones. Revisa el correo en Gmail para confirmar la entrega.
 
-## Habilitar Outlook desde Vercel
+La primera ejecución con excepciones reserva una huella en `output/alertas_ep3.sqlite`. Si el servicio acepta el envío, se guarda `aceptado`. Si falla o hay incertidumbre, queda `pendiente` y el robot bloquea el envío repetido. Para recuperar una ejecución pendiente, verifica primero la carpeta Enviados de Gmail o la recepción del mensaje. Si compruebas que el correo no se aceptó, corrige la causa y libera únicamente el registro pendiente con `DELETE FROM alertas WHERE huella = ? AND estado = 'pendiente'`, usando la huella que muestra el robot. Conserva esta base entre ejecuciones.
 
-1. En Microsoft Entra registra una aplicación de un solo tenant. Usa un buzón de Exchange Online autorizado. Pide al administrador que asigne `Application Mail.Send` con alcance al buzón emisor usando RBAC de Exchange Online. Los permisos son aditivos. Evita conceder a la aplicación un permiso global de envío si usas un alcance de buzón en Exchange.
-2. En el proyecto Vercel conectado a este repositorio, con raíz `./`, configura `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_MAILBOX` y `GRAPH_REVIEW_TO`. El último es el buzón autorizado del responsable de revisión. Añade `ALERT_API_SECRET` con al menos 32 caracteres aleatorios y vuelve a desplegar.
-3. Configura en el equipo del robot `VERCEL_OUTLOOK_URL` con la URL HTTPS del proyecto terminada en `/api/outlook` y `VERCEL_ALERT_SECRET` con el mismo secreto de Vercel. Guarda los valores fuera del repositorio. Ejecuta `python robot_ep3.py --enviar --abrir-excel` desde el entorno virtual.
-4. Comprueba el `202` y `request_id` en el log. El `202` es un acuse de aceptación de Microsoft. Verifica Enviados o la recepción y abre el adjunto antes de registrar el envío como evidencia.
-
-La primera ejecución con excepciones reserva una huella en `output/alertas_ep3.sqlite`. Si Graph acepta, se guarda `aceptado`. Si falla o hay incertidumbre, queda `pendiente` y el robot bloquea el envío repetido. Para recuperar una ejecución pendiente, verifica primero los elementos enviados o el seguimiento de mensajes con el administrador. Si compruebas que el correo no se aceptó, corrige la causa y libera únicamente el registro pendiente con `DELETE FROM alertas WHERE huella = ? AND estado = 'pendiente'`, usando la huella que muestra el robot. Conserva esta base entre ejecuciones.
-
-- [Microsoft Graph sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0)
-- [RBAC de aplicaciones en Exchange Online](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac)
 - [RandomUser](https://randomuser.me/documentation)
 
 ## Evaluación

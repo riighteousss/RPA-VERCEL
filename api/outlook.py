@@ -126,12 +126,12 @@ class handler(BaseHTTPRequestHandler):
             else:
                 request_id = enviar_graph(attachment, count)
         except HTTPError as error:
-            print(f"[outlook] Proveedor HTTP {error.code}", flush=True)
+            print(f"[correo] Proveedor HTTP {error.code}", flush=True)
             _json_respuesta(self, 502, {"error": "Microsoft rechazó la solicitud", "http_microsoft": error.code})
             return
         except (OSError, ValueError, KeyError) as error:
-            print(f"[outlook] Error de proveedor: {type(error).__name__}", flush=True)
+            print(f"[correo] Error de proveedor: {type(error).__name__}", flush=True)
             _json_respuesta(self, 502, {"error": "No se pudo confirmar la aceptación por Microsoft"})
             return
-        print(f"[outlook] HTTP 202 | casos={count} | request_id={request_id}", flush=True)
+        print(f"[correo] HTTP 202 | casos={count} | request_id={request_id}", flush=True)
         _json_respuesta(self, 202, {"estado": "aceptado", "request_id": request_id})

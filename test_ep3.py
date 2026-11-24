@@ -51,7 +51,7 @@ with TemporaryDirectory() as destino:
         assert base64.b64decode(payload["xlsx"]) == adjunto.read_bytes()
         with closing(sqlite3.connect(ruta / "alertas_ep3.sqlite")) as db:
             assert db.execute("SELECT estado FROM alertas").fetchall() == [("aceptado",)]
-    print("Outlook simulado: 0 casos omitidos, HTTP 202 simulado, segundo envío bloqueado")
+    print("Correo simulado: 0 casos omitidos, HTTP 202 simulado, segundo envío bloqueado")
 
     entorno_graph = {
         "GRAPH_TENANT_ID": "01234567-89ab-cdef-0123-456789abcdef",

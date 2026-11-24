@@ -8,16 +8,16 @@ flowchart TD
     D --> E[Validar formato, cruzar maestro y aplicar reglas]
     E --> F[Guardar y reabrir Excel]
     F --> G{¿Envío habilitado y excepciones?}
-    G -- No --> L([Registrar y finalizar])
+    G -- No --> L([Registrar éxito y avisar por Telegram])
     G -- Sí --> H{Reservar huella en SQLite}
     H -- Ya aceptada --> L
-    H -- Pendiente --> M([Revisar estado con el responsable])
+    H -- Pendiente --> M([Registrar envío pendiente y avisar por Telegram])
     H -- Nueva --> I[Entregar adjunto HTTPS a Vercel]
-    I --> J[Autenticar aplicación y llamar Graph sendMail]
-    J -- HTTP 202 --> K[Marcar aceptado y registrar acuse]
+    I --> J[Enviar Excel por Gmail]
+    J -- Envío aceptado --> K[Marcar aceptado y registrar acuse]
     K --> L
     J -- Error o resultado incierto --> M
-    B -. Error .-> N([Registrar fallo y detener])
+    B -. Error de conexión tras tres intentos .-> N([Registrar fallo y avisar por Telegram])
     C -. Error .-> N
     D -. Error .-> N
     F -. Error .-> N
